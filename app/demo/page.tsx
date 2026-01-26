@@ -15,6 +15,8 @@ const mockProblems = [
     author: { username: "alexj", avatarUrl: "" },
     isAnonymous: false,
     createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+    involvement: "already-building" as const,
+    alreadyBuildingSupport: ["awareness", "capital"] as const,
   },
   {
     id: "2",
@@ -28,6 +30,8 @@ const mockProblems = [
     investorCount: 7,
     isAnonymous: true,
     createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000), // 5 hours ago
+    involvement: "want-build" as const,
+    wantBuildBlocker: "need-capital" as const,
   },
   {
     id: "3",
@@ -42,6 +46,8 @@ const mockProblems = [
     author: { username: "sarahm", avatarUrl: "" },
     isAnonymous: false,
     createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000), // 8 hours ago
+    involvement: "want-to-work" as const,
+    wantToWorkInvolvement: "volunteer" as const,
   },
 ]
 

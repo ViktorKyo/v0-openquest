@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Sparkles } from "lucide-react"
+import Link from "next/link"
 
 export function Hero() {
   return (
@@ -78,12 +79,16 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
-            <Button size="lg" className="group h-12 px-6 text-base">
-              Browse Problems
-              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+            <Button size="lg" className="group h-12 px-6 text-base" asChild>
+              <Link href="/feed">
+                Browse Problems
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
             </Button>
-            <Button size="lg" variant="outline" className="h-12 px-6 text-base bg-transparent">
-              Submit a Problem
+            <Button size="lg" variant="outline" className="h-12 px-6 text-base bg-transparent" asChild>
+              <Link href="/submit">
+                Submit a Problem
+              </Link>
             </Button>
           </motion.div>
         </div>

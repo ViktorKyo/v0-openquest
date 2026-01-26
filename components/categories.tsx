@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import Link from "next/link"
 
 const categories = [
   { name: "Moonshots", color: "bg-violet-500/10 text-violet-400 border-violet-500/20" },
@@ -37,20 +38,27 @@ export function Categories() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="flex flex-wrap justify-center gap-3"
         >
-          {categories.map((category, index) => (
-            <motion.button
-              key={category.name}
-              initial={{ opacity: 0, scale: 0.9 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.3, delay: index * 0.05 }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`rounded-full border px-5 py-2.5 text-sm font-medium transition-all hover:shadow-lg ${category.color}`}
-            >
-              {category.name}
-            </motion.button>
-          ))}
+          {categories.map((category, index) => {
+            const categorySlug = category.name.toLowerCase().replace(/\s+&\s+/g, '-').replace(/\s+/g, '-')
+            return (
+              <motion.div
+                key={category.name}
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.3, delay: index * 0.05 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Link
+                  href={`/category/${categorySlug}`}
+                  className={`inline-block rounded-full border px-5 py-2.5 text-sm font-medium transition-all hover:shadow-lg ${category.color}`}
+                >
+                  {category.name}
+                </Link>
+              </motion.div>
+            )
+          })}
         </motion.div>
       </div>
     </section>

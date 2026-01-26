@@ -1,9 +1,71 @@
 "use client"
 
+import { useMemo } from "react"
 import { motion } from "framer-motion"
 import { FeedProblemCard } from "@/components/feed-problem-card"
+import { useFeedFilters } from "@/contexts/feed-filter-context"
+import { allProblems } from "@/data/mock-problems"
 
-const mockProblems = [
+function getTimeAgo(date: Date): string {
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+  if (seconds < 60) return "just now"
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
+  return `${Math.floor(seconds / 604800)}w ago`
+}
+
+function getCategoryColor(category: string): string {
+  const colors: Record<string, string> = {
+    "Niche Markets": "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    "Climate Tech": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    "AI & Infrastructure": "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    "Future of Work": "bg-green-500/10 text-green-400 border-green-500/20",
+    "Creator Economy": "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    Longevity: "bg-pink-500/10 text-pink-400 border-pink-500/20",
+    "Rebuild Money": "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    Moonshots: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    "World of Atoms": "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    Other: "bg-gray-500/10 text-gray-400 border-gray-500/20",
+  }
+  return colors[category] || "bg-gray-500/10 text-gray-400 border-gray-500/20"
+}
+
+// Transform centralized problems to feed format
+const transformedProblems = allProblems.map((problem) => {
+  return {
+    id: problem.id,
+    originalId: problem.id, // Keep original ID for reference
+    title: problem.title,
+    description: problem.elevatorPitch,
+    category: problem.category,
+    categoryColor: getCategoryColor(problem.category),
+    upvotes: problem.upvotes,
+    comments: problem.commentCount,
+    building: problem.builderCount,
+    investors: problem.investorCount,
+    author: {
+      name: problem.author.username,
+      isAnonymous: problem.isAnonymous,
+      isYC: (problem as any).isYCRFS || false,
+      isWeekendFund: (problem as any).isWeekendFundRFS || false,
+    },
+    timeAgo: getTimeAgo(problem.createdAt),
+    createdAt: problem.createdAt,
+    isYCRFS: (problem as any).isYCRFS || false,
+    ycQuarter: (problem as any).ycQuarter,
+    isWeekendFundRFS: (problem as any).isWeekendFundRFS || false,
+    wfPublishedDate: (problem as any).wfPublishedDate,
+  }
+});
+
+// Use transformed problems from centralized data
+const mockProblems = transformedProblems;
+
+// Keep old data as fallback (commented out)
+/* const mockProblemsOld = [
   {
     id: 1,
     title: "Need a better way to track carbon footprint for small manufacturing businesses",
@@ -17,6 +79,7 @@ const mockProblems = [
     investors: 2,
     author: { name: "Sarah Martinez", isAnonymous: false },
     timeAgo: "2h ago",
+    createdAt: hoursAgo(2),
   },
   {
     id: 2,
@@ -31,6 +94,7 @@ const mockProblems = [
     investors: 5,
     author: { name: "Anonymous", isAnonymous: true },
     timeAgo: "4h ago",
+    createdAt: hoursAgo(4),
   },
   {
     id: 3,
@@ -45,6 +109,7 @@ const mockProblems = [
     investors: 3,
     author: { name: "Alex Chen", isAnonymous: false },
     timeAgo: "6h ago",
+    createdAt: hoursAgo(6),
   },
   {
     id: 4,
@@ -59,6 +124,7 @@ const mockProblems = [
     investors: 1,
     author: { name: "Jamie Lee", isAnonymous: false },
     timeAgo: "8h ago",
+    createdAt: hoursAgo(8),
   },
   {
     id: 5,
@@ -73,6 +139,7 @@ const mockProblems = [
     investors: 0,
     author: { name: "Anonymous", isAnonymous: true },
     timeAgo: "10h ago",
+    createdAt: hoursAgo(10),
   },
   {
     id: 6,
@@ -87,6 +154,7 @@ const mockProblems = [
     investors: 0,
     author: { name: "Morgan Taylor", isAnonymous: false },
     timeAgo: "12h ago",
+    createdAt: hoursAgo(12),
   },
   {
     id: 7,
@@ -101,6 +169,7 @@ const mockProblems = [
     investors: 1,
     author: { name: "Taylor Brooks", isAnonymous: false },
     timeAgo: "14h ago",
+    createdAt: hoursAgo(14),
   },
   {
     id: 8,
@@ -115,6 +184,7 @@ const mockProblems = [
     investors: 2,
     author: { name: "Anonymous", isAnonymous: true },
     timeAgo: "16h ago",
+    createdAt: hoursAgo(16),
   },
   {
     id: 9,
@@ -129,6 +199,7 @@ const mockProblems = [
     investors: 1,
     author: { name: "Riley Kim", isAnonymous: false },
     timeAgo: "18h ago",
+    createdAt: hoursAgo(18),
   },
   {
     id: 10,
@@ -143,24 +214,67 @@ const mockProblems = [
     investors: 0,
     author: { name: "Casey Jordan", isAnonymous: false },
     timeAgo: "20h ago",
+    createdAt: hoursAgo(20),
   },
-]
+] */
 
 export function FeedList() {
+  const { activeTab, selectedCategory, sortOption } = useFeedFilters()
+
+  const filteredAndSortedProblems = useMemo(() => {
+    // Step 1: Filter by category
+    let filtered = mockProblems
+    if (selectedCategory !== "All Categories") {
+      filtered = filtered.filter((problem) => problem.category === selectedCategory)
+    }
+
+    // Step 2: Apply sorting based on active tab and sort option
+    let sorted = [...filtered]
+
+    if (activeTab === "trending") {
+      // Trending tab: Primary sort by upvotes (can be overridden by sort dropdown)
+      if (sortOption === "Most upvoted") {
+        sorted.sort((a, b) => b.upvotes - a.upvotes)
+      } else if (sortOption === "Most recent") {
+        sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      } else if (sortOption === "Most discussed") {
+        sorted.sort((a, b) => b.comments - a.comments)
+      }
+    } else if (activeTab === "new") {
+      // New tab: Primary sort by creation date (can be overridden by sort dropdown)
+      if (sortOption === "Most recent") {
+        sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      } else if (sortOption === "Most upvoted") {
+        sorted.sort((a, b) => b.upvotes - a.upvotes)
+      } else if (sortOption === "Most discussed") {
+        sorted.sort((a, b) => b.comments - a.comments)
+      }
+    }
+
+    return sorted
+  }, [activeTab, selectedCategory, sortOption])
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
-      <div className="space-y-4">
-        {mockProblems.map((problem, index) => (
-          <motion.div
-            key={problem.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
-          >
-            <FeedProblemCard problem={problem} />
-          </motion.div>
-        ))}
-      </div>
+      {filteredAndSortedProblems.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No problems found matching your filters.</p>
+          <p className="text-sm text-muted-foreground mt-2">Try adjusting your category or sort options.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredAndSortedProblems.map((problem, index) => (
+            <motion.div
+              key={problem.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.05 }}
+            >
+              <FeedProblemCard problem={problem} />
+            </motion.div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

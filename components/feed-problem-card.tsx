@@ -5,9 +5,13 @@ import { motion } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import { ChevronUp, MessageCircle, Hammer, DollarSign } from "lucide-react"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { YCBadge, YCQuarterTag } from "@/components/yc-badge"
+import { WeekendFundBadge, WeekendFundDateTag } from "@/components/weekend-fund-badge"
 
 interface FeedProblem {
-  id: number
+  id: number | string
   title: string
   description: string
   category: string
@@ -19,15 +23,25 @@ interface FeedProblem {
   author: {
     name: string
     isAnonymous: boolean
+    isYC?: boolean
+    isWeekendFund?: boolean
   }
   timeAgo: string
+  isYCRFS?: boolean
+  ycQuarter?: string
+  isWeekendFundRFS?: boolean
+  wfPublishedDate?: string
 }
 
 export function FeedProblemCard({ problem }: { problem: FeedProblem }) {
   const [upvoted, setUpvoted] = useState(false)
   const [upvoteCount, setUpvoteCount] = useState(problem.upvotes)
+  const router = useRouter()
 
-  const handleUpvote = () => {
+  const handleUpvote = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
     if (upvoted) {
       setUpvoteCount(upvoteCount - 1)
     } else {
@@ -36,8 +50,21 @@ export function FeedProblemCard({ problem }: { problem: FeedProblem }) {
     setUpvoted(!upvoted)
   }
 
+  const handleCategoryClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    router.push(`/category/${problem.category.toLowerCase().replace(/\s+&\s+/g, '-').replace(/\s+/g, '-')}`)
+  }
+
+  const handleCardClick = () => {
+    router.push(`/problem/${problem.id}`)
+  }
+
   return (
-    <Card className="group relative overflow-hidden border-border/50 bg-card transition-all duration-200 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 py-0">
+    <Card
+      className="group relative overflow-hidden border-border/50 bg-card transition-all duration-200 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 py-0 cursor-pointer"
+      onClick={handleCardClick}
+    >
       <div className="flex gap-4 p-4 sm:p-5">
         {/* Upvote button - Product Hunt style */}
         <motion.button
@@ -56,9 +83,10 @@ export function FeedProblemCard({ problem }: { problem: FeedProblem }) {
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          {/* Category badge */}
-          <div className="mb-2.5">
+          {/* Category badge and YC badge */}
+          <div className="mb-2.5 flex items-center gap-2 flex-wrap">
             <button
+              onClick={handleCategoryClick}
               className={cn(
                 "inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors hover:bg-opacity-80",
                 problem.categoryColor,
@@ -66,16 +94,36 @@ export function FeedProblemCard({ problem }: { problem: FeedProblem }) {
             >
               {problem.category}
             </button>
+            {problem.isYCRFS && <YCBadge variant="compact" />}
+            {problem.ycQuarter && <YCQuarterTag quarter={problem.ycQuarter} />}
+            {problem.isWeekendFundRFS && <WeekendFundBadge variant="compact" />}
+            {problem.wfPublishedDate && <WeekendFundDateTag date={problem.wfPublishedDate} />}
           </div>
 
           {/* Title */}
-          <h3 className="mb-2 text-xl font-bold text-foreground line-clamp-2 leading-tight group-hover:text-accent transition-colors cursor-pointer">
+          <h3 className="mb-2 text-xl font-bold text-foreground line-clamp-2 leading-tight group-hover:text-accent transition-colors">
             {problem.title}
           </h3>
 
           {/* Metadata */}
           <div className="mb-2.5 flex items-center gap-2 text-sm text-muted-foreground">
-            <span>{problem.author.isAnonymous ? "Anonymous" : problem.author.name}</span>
+            {problem.author.isYC ? (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-orange-500 text-[10px] font-bold text-white">
+                  Y
+                </span>
+                <span className="font-medium">{problem.author.name}</span>
+              </span>
+            ) : problem.author.isWeekendFund ? (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 text-[10px] font-bold text-white">
+                  ☀️
+                </span>
+                <span className="font-medium">{problem.author.name}</span>
+              </span>
+            ) : (
+              <span>{problem.author.isAnonymous ? "Anonymous" : problem.author.name}</span>
+            )}
             <span className="text-muted-foreground/50">·</span>
             <span>{problem.timeAgo}</span>
           </div>

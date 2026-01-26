@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { ChevronDown, Flame, Clock } from "lucide-react"
+import { ChevronDown, Flame, Clock, Check } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useFeedFilters } from "@/contexts/feed-filter-context"
 
 const categories = [
   "All Categories",
@@ -17,10 +17,10 @@ const categories = [
   "Education",
 ]
 
-const sortOptions = ["Most upvoted", "Most recent", "Most discussed"]
+const sortOptions = ["Most upvoted", "Most recent", "Most discussed"] as const
 
 export function FeedFilters() {
-  const [activeTab, setActiveTab] = useState<"trending" | "new">("trending")
+  const { activeTab, setActiveTab, selectedCategory, setSelectedCategory, sortOption, setSortOption } = useFeedFilters()
 
   return (
     <motion.div
@@ -59,13 +59,20 @@ export function FeedFilters() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 hidden sm:flex bg-transparent">
-                  Category
+                  {selectedCategory === "All Categories" ? "Category" : selectedCategory}
                   <ChevronDown className="ml-1 h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 {categories.map((category) => (
-                  <DropdownMenuItem key={category}>{category}</DropdownMenuItem>
+                  <DropdownMenuItem
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className="cursor-pointer flex items-center justify-between"
+                  >
+                    {category}
+                    {selectedCategory === category && <Check className="h-4 w-4 ml-2" />}
+                  </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -80,7 +87,14 @@ export function FeedFilters() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 {sortOptions.map((option) => (
-                  <DropdownMenuItem key={option}>{option}</DropdownMenuItem>
+                  <DropdownMenuItem
+                    key={option}
+                    onClick={() => setSortOption(option)}
+                    className="cursor-pointer flex items-center justify-between"
+                  >
+                    {option}
+                    {sortOption === option && <Check className="h-4 w-4 ml-2" />}
+                  </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>

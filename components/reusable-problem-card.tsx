@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card"
 import { ChevronUp, MessageCircle, Hammer, DollarSign } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { AuthorIntentTags, type Involvement, type WantBuildBlocker, type WantToWorkInvolvement, type AlreadyBuildingSupport } from "@/components/author-intent-tags"
 
 interface ProblemCardProps {
   problem: {
@@ -22,6 +23,11 @@ interface ProblemCardProps {
     author?: { username: string; avatarUrl: string }
     isAnonymous: boolean
     createdAt: Date
+    // Author intent fields
+    involvement?: Involvement
+    wantBuildBlocker?: WantBuildBlocker
+    wantToWorkInvolvement?: WantToWorkInvolvement
+    alreadyBuildingSupport?: AlreadyBuildingSupport[]
   }
   variant?: "compact" | "detailed"
   onUpvote?: () => void
@@ -144,12 +150,26 @@ export function ProblemCard({ problem, variant = "compact", onUpvote, isUpvoted:
             {/* Description */}
             <p
               className={cn(
-                "text-sm leading-relaxed text-muted-foreground mb-3",
-                isCompact ? "line-clamp-2" : "line-clamp-3",
+                "text-sm leading-relaxed text-muted-foreground",
+                isCompact ? "line-clamp-2 mb-2" : "line-clamp-3 mb-3",
               )}
             >
               {problem.elevatorPitch}
             </p>
+
+            {/* Author Intent Tags */}
+            {problem.involvement && (
+              <div className="mb-3">
+                <AuthorIntentTags
+                  involvement={problem.involvement}
+                  wantBuildBlocker={problem.wantBuildBlocker}
+                  wantToWorkInvolvement={problem.wantToWorkInvolvement}
+                  alreadyBuildingSupport={problem.alreadyBuildingSupport}
+                  variant="compact"
+                  isAnonymous={problem.isAnonymous}
+                />
+              </div>
+            )}
 
             {/* Engagement Row */}
             <div className="flex items-center gap-4 text-xs text-muted-foreground">

@@ -59,16 +59,24 @@ export function FeedHeader() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              {categories.map((category) => (
-                <DropdownMenuItem key={category}>{category}</DropdownMenuItem>
-              ))}
+              {categories.map((category) => {
+                const categorySlug = category.toLowerCase().replace(/\s+&\s+/g, '-').replace(/\s+/g, '-')
+                const href = category === "All Categories" ? "/feed" : `/category/${categorySlug}`
+                return (
+                  <DropdownMenuItem key={category} asChild>
+                    <Link href={href}>{category}</Link>
+                  </DropdownMenuItem>
+                )
+              })}
             </DropdownMenuContent>
           </DropdownMenu>
 
           {/* Submit Problem button */}
-          <Button size="sm" className="bg-foreground text-background hover:bg-foreground/90">
-            <span className="hidden sm:inline">Submit Problem</span>
-            <span className="sm:hidden">Submit</span>
+          <Button size="sm" className="bg-foreground text-background hover:bg-foreground/90" asChild>
+            <Link href="/submit">
+              <span className="hidden sm:inline">Submit Problem</span>
+              <span className="sm:hidden">Submit</span>
+            </Link>
           </Button>
 
           {/* User menu */}
@@ -79,9 +87,15 @@ export function FeedHeader() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/profile">Profile</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/settings">Settings</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/login">Log out</Link>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

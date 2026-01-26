@@ -2,54 +2,63 @@
 
 import { motion } from "framer-motion"
 import { ProblemCard } from "@/components/problem-card"
+import Link from "next/link"
+import { getTrendingProblems } from "@/data/mock-problems"
 
-const problems = [
-  {
-    id: 1,
-    title: "Local food delivery for rural areas",
-    description:
-      "Rural communities lack access to food delivery services that urban areas take for granted. There's an opportunity to build hyper-local solutions.",
-    category: "Niche markets",
-    upvotes: 247,
-    comments: 34,
+// Get top 6 trending problems (mix of regular and YC)
+const trendingProblems = getTrendingProblems(6)
+
+// Transform to match ProblemCard interface
+const problems = trendingProblems.map((problem) => {
+  const timeAgo = getTimeAgo(problem.createdAt)
+
+  return {
+    id: problem.id,
+    title: problem.title,
+    description: problem.elevatorPitch,
+    category: problem.category,
+    upvotes: problem.upvotes,
+    comments: problem.commentCount,
     author: {
-      name: "Sarah Chen",
-      avatar: "/professional-woman-avatar.png",
+      name: problem.author.username,
+      avatar: problem.author.avatarUrl,
     },
-    timeAgo: "2h ago",
-    categoryColor: "bg-orange-500/10 text-orange-400",
-  },
-  {
-    id: 2,
-    title: "Carbon tracking for small businesses",
-    description:
-      "Enterprise carbon tracking exists, but SMBs need affordable, simple solutions to measure and reduce their environmental impact.",
-    category: "Climate tech",
-    upvotes: 189,
-    comments: 28,
-    author: {
-      name: "Marcus Johnson",
-      avatar: "/professional-man-avatar.png",
-    },
-    timeAgo: "5h ago",
-    categoryColor: "bg-emerald-500/10 text-emerald-400",
-  },
-  {
-    id: 3,
-    title: "AI-powered code review for solo devs",
-    description:
-      "Solo developers miss out on code review benefits. An AI system that provides meaningful, context-aware feedback could fill this gap.",
-    category: "AI & infrastructure",
-    upvotes: 312,
-    comments: 56,
-    author: {
-      name: "Alex Rivera",
-      avatar: "/person-avatar-tech.jpg",
-    },
-    timeAgo: "8h ago",
-    categoryColor: "bg-blue-500/10 text-blue-400",
-  },
-]
+    timeAgo,
+    categoryColor: getCategoryColor(problem.category),
+    involvement: problem.involvement,
+    wantBuildBlocker: problem.wantBuildBlocker,
+    wantToWorkInvolvement: problem.wantToWorkInvolvement,
+    alreadyBuildingSupport: problem.alreadyBuildingSupport,
+    isAnonymous: problem.isAnonymous,
+  }
+})
+
+function getTimeAgo(date: Date): string {
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+  if (seconds < 60) return "just now"
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
+  return `${Math.floor(seconds / 604800)}w ago`
+}
+
+function getCategoryColor(category: string): string {
+  const colors: Record<string, string> = {
+    "Niche Markets": "bg-orange-500/10 text-orange-400",
+    "Climate Tech": "bg-emerald-500/10 text-emerald-400",
+    "AI & Infrastructure": "bg-blue-500/10 text-blue-400",
+    "Future of Work": "bg-green-500/10 text-green-400",
+    "Creator Economy": "bg-pink-500/10 text-pink-400",
+    Longevity: "bg-red-500/10 text-red-400",
+    "Rebuild Money": "bg-yellow-500/10 text-yellow-400",
+    Moonshots: "bg-violet-500/10 text-violet-400",
+    "World of Atoms": "bg-amber-500/10 text-amber-400",
+    Other: "bg-gray-500/10 text-gray-400",
+  }
+  return colors[category] || "bg-gray-500/10 text-gray-400"
+}
 
 export function ProblemsPreview() {
   return (
@@ -87,12 +96,12 @@ export function ProblemsPreview() {
           transition={{ duration: 0.5, delay: 0.4 }}
           className="mt-12 text-center"
         >
-          <a
-            href="#"
+          <Link
+            href="/feed"
             className="inline-flex items-center text-sm font-medium text-accent hover:text-accent/80 transition-colors"
           >
             View all problems →
-          </a>
+          </Link>
         </motion.div>
       </div>
     </section>

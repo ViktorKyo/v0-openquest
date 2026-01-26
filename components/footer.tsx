@@ -5,10 +5,28 @@ import { Compass } from "lucide-react"
 import Link from "next/link"
 
 const footerLinks = {
-  Product: ["Browse Problems", "Submit Problem", "Trending", "Categories"],
-  Resources: ["About", "Blog", "Changelog", "Help Center"],
-  Legal: ["Privacy", "Terms", "Cookies"],
-  Social: ["Twitter", "Discord", "GitHub"],
+  Product: [
+    { name: "Browse Problems", href: "/feed" },
+    { name: "Submit Problem", href: "/submit" },
+    { name: "Trending", href: "/feed?sort=trending" },
+    { name: "Categories", href: "/#categories" },
+  ],
+  Resources: [
+    { name: "About", href: "/about" },
+    { name: "Blog", href: "https://blog.openquest.com", external: true },
+    { name: "Changelog", href: "https://github.com/openquest/changelog", external: true },
+    { name: "Help Center", href: "/help" },
+  ],
+  Legal: [
+    { name: "Privacy", href: "/privacy" },
+    { name: "Terms", href: "/terms" },
+    { name: "Cookies", href: "/cookies" },
+  ],
+  Social: [
+    { name: "Twitter", href: "https://twitter.com/openquest", external: true },
+    { name: "Discord", href: "https://discord.gg/openquest", external: true },
+    { name: "GitHub", href: "https://github.com/openquest", external: true },
+  ],
 }
 
 export function Footer() {
@@ -41,10 +59,21 @@ export function Footer() {
               <h4 className="mb-4 text-sm font-semibold text-foreground">{title}</h4>
               <ul className="space-y-3">
                 {links.map((link) => (
-                  <li key={link}>
-                    <Link href="#" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                      {link}
-                    </Link>
+                  <li key={link.name}>
+                    {link.external ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {link.name}
+                      </a>
+                    ) : (
+                      <Link href={link.href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                        {link.name}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

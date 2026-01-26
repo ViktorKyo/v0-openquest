@@ -22,22 +22,24 @@ export function Header() {
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
-          <Link href="#problems" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <Link href="/feed" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             Browse
           </Link>
-          <Link href="#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <Link href="/#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             How it works
           </Link>
-          <Link href="#categories" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <Link href="/#categories" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             Categories
           </Link>
         </nav>
 
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="text-muted-foreground">
-            Log in
+          <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
+            <Link href="/login">Log in</Link>
           </Button>
-          <Button size="sm">Submit a Problem</Button>
+          <Button size="sm" asChild>
+            <Link href="/submit">Submit a Problem</Link>
+          </Button>
         </div>
       </div>
     </motion.header>
