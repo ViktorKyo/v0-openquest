@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/admin-auth';
 import { db } from '@/lib/db/supabase';
-import { problems, users } from '@/lib/db/schema';
+import { problems, users, comments } from '@/lib/db/schema';
 import { eq, and, count, sql, gte } from 'drizzle-orm';
 
 export async function GET() {
@@ -91,16 +91,55 @@ export async function GET() {
     const usersTrend =
       previousUsers > 0 ? ((recentUsers - previousUsers) / previousUsers) * 100 : 0;
 
+    // Total comments count
+    const [totalCommentsResult] = await db
+      .select({ count: count() })
+      .from(comments)
+      .where(eq(comments.isDeleted, false));
+    const totalComments = totalCommentsResult.count;
+
+    // Hidden/moderated comments count
+    const [hiddenCommentsResult] = await db
+      .select({ count: count() })
+      .from(comments)
+      .where(and(eq(comments.isHidden, true), eq(comments.isDeleted, false)));
+    const hiddenComments = hiddenCommentsResult.count;
+
+    // Comments created in last 30 days
+    const [recentCommentsResult] = await db
+      .select({ count: count() })
+      .from(comments)
+      .where(and(gte(comments.createdAt, thirtyDaysAgo), eq(comments.isDeleted, false)));
+    const recentComments = recentCommentsResult.count;
+
+    const [previousCommentsResult] = await db
+      .select({ count: count() })
+      .from(comments)
+      .where(
+        and(
+          gte(comments.createdAt, sixtyDaysAgo),
+          sql`${comments.createdAt} < ${thirtyDaysAgo.toISOString()}`,
+          eq(comments.isDeleted, false)
+        )
+      );
+    const previousComments = previousCommentsResult.count;
+
+    const commentsTrend =
+      previousComments > 0 ? ((recentComments - previousComments) / previousComments) * 100 : 0;
+
     return NextResponse.json({
       stats: {
         totalProblems,
         pendingProblems,
         totalUsers,
         activeBuilders,
+        totalComments,
+        hiddenComments,
       },
       trends: {
         problems: parseFloat(problemsTrend.toFixed(1)),
         users: parseFloat(usersTrend.toFixed(1)),
+        comments: parseFloat(commentsTrend.toFixed(1)),
       },
     });
   } catch (error) {

@@ -9,6 +9,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { YCBadge, YCQuarterTag } from "@/components/yc-badge"
 import { WeekendFundBadge, WeekendFundDateTag } from "@/components/weekend-fund-badge"
+import { InstitutionalLogo } from "@/components/institutional-author"
 
 interface FeedProblem {
   id: number | string
@@ -109,17 +110,13 @@ export function FeedProblemCard({ problem }: { problem: FeedProblem }) {
           <div className="mb-2.5 flex items-center gap-2 text-sm text-muted-foreground">
             {problem.author.isYC ? (
               <span className="flex items-center gap-1.5">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-orange-500 text-[10px] font-bold text-white">
-                  Y
-                </span>
-                <span className="font-medium">{problem.author.name}</span>
+                <InstitutionalLogo type="yc" />
+                <span className="font-medium">Y Combinator</span>
               </span>
             ) : problem.author.isWeekendFund ? (
               <span className="flex items-center gap-1.5">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 text-[10px] font-bold text-white">
-                  ☀️
-                </span>
-                <span className="font-medium">{problem.author.name}</span>
+                <InstitutionalLogo type="weekend-fund" />
+                <span className="font-medium">Weekend Fund</span>
               </span>
             ) : (
               <span>{problem.author.isAnonymous ? "Anonymous" : problem.author.name}</span>

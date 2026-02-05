@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { AlertCircle, Users, FileText, Briefcase } from "lucide-react"
+import { AlertCircle, Users, FileText, Briefcase, MessageCircle } from "lucide-react"
 import { StatCard } from "@/components/admin/stat-card"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 
@@ -12,10 +12,13 @@ interface DashboardStats {
     pendingProblems: number
     totalUsers: number
     activeBuilders: number
+    totalComments: number
+    hiddenComments: number
   }
   trends: {
     problems: number
     users: number
+    comments: number
   }
 }
 
@@ -72,7 +75,7 @@ export default function AdminDashboardPage() {
       </motion.div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Total Problems"
           value={stats.stats.totalProblems.toLocaleString()}
@@ -94,10 +97,17 @@ export default function AdminDashboardPage() {
           index={2}
         />
         <StatCard
+          title="Total Comments"
+          value={stats.stats.totalComments.toLocaleString()}
+          icon={MessageCircle}
+          trend={stats.trends.comments}
+          index={3}
+        />
+        <StatCard
           title="Active Projects"
           value={stats.stats.activeBuilders.toLocaleString()}
           icon={Briefcase}
-          index={3}
+          index={4}
         />
       </div>
 

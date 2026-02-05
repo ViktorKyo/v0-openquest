@@ -1,20 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Sparkles, ArrowLeft } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Sparkles, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
 
-export default function LoginPage() {
+function LoginForm() {
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
+  const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -38,7 +40,7 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
-        await login(email, password)
+        await login(email, password, rememberMe)
       } else {
         if (!name.trim()) {
           setError("Please enter your name")
@@ -49,7 +51,11 @@ export default function LoginPage() {
       }
       router.push(returnUrl)
     } catch (err) {
-      setError("Authentication failed. Please try again.")
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError("Authentication failed. Please try again.")
+      }
       setIsLoading(false)
     }
   }
@@ -90,6 +96,7 @@ export default function LoginPage() {
           <div className="flex gap-2 mb-6 p-1 bg-secondary rounded-lg">
             <button
               type="button"
+              aria-pressed={isLogin}
               onClick={() => {
                 setIsLogin(true)
                 setError("")
@@ -102,6 +109,7 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
+              aria-pressed={!isLogin}
               onClick={() => {
                 setIsLogin(false)
                 setError("")
@@ -143,7 +151,17 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {isLogin && (
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                )}
+              </div>
               <Input
                 id="password"
                 type="password"
@@ -151,10 +169,23 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={8}
               />
-              {!isLogin && <p className="text-xs text-muted-foreground">Must be at least 6 characters</p>}
+              {!isLogin && <p className="text-xs text-muted-foreground">Must be at least 8 characters</p>}
             </div>
+
+            {isLogin && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked === true)}
+                />
+                <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
+                  Remember me for 30 days
+                </Label>
+              </div>
+            )}
 
             {error && (
               <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">{error}</div>
@@ -164,13 +195,6 @@ export default function LoginPage() {
               {isLoading ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
             </Button>
           </form>
-
-          {/* Demo credentials */}
-          <div className="mt-6 p-4 bg-secondary/50 rounded-lg">
-            <p className="text-xs text-muted-foreground text-center">
-              <strong>Demo Mode:</strong> Use any email and password to test the platform
-            </p>
-          </div>
         </motion.div>
 
         {/* Footer note */}
@@ -179,5 +203,19 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   )
 }

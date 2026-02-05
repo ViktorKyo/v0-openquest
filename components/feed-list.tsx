@@ -241,14 +241,8 @@ export function FeedList() {
         sorted.sort((a, b) => b.comments - a.comments)
       }
     } else if (activeTab === "new") {
-      // New tab: Primary sort by creation date (can be overridden by sort dropdown)
-      if (sortOption === "Most recent") {
-        sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      } else if (sortOption === "Most upvoted") {
-        sorted.sort((a, b) => b.upvotes - a.upvotes)
-      } else if (sortOption === "Most discussed") {
-        sorted.sort((a, b) => b.comments - a.comments)
-      }
+      // New tab: Always sort by most recent first
+      sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     }
 
     return sorted

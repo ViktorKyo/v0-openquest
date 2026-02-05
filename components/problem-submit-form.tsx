@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { cn } from "@/lib/utils"
 
 const CATEGORIES = [
@@ -236,21 +236,13 @@ export default function ProblemSubmitForm() {
       return
     }
 
-    console.log("[v0] Form submitted:", {
-      ...data,
-      tags: selectedTags,
-      alreadyBuildingSupport: alreadyBuildingSupportOptions,
-      uploadedFile: uploadedFile ? { name: uploadedFile.name, size: uploadedFile.size, type: uploadedFile.type } : null,
-      forkedFrom: forkData ? forkData.originalId : null,
-      forkValidation: forkValidation
-        ? {
-            titleDiff: forkValidation.titleDiff,
-            pitchDiff: forkValidation.pitchDiff,
-            descriptionDiff: forkValidation.descriptionDiff,
-            overallDiff: forkValidation.overallDiff,
-          }
-        : null,
-    })
+    // TODO: Submit to API
+    // const formPayload = {
+    //   ...data,
+    //   tags: selectedTags,
+    //   alreadyBuildingSupport: alreadyBuildingSupportOptions,
+    //   forkedFrom: forkData?.originalId,
+    // }
 
     // Show success modal
     setShowSuccessModal(true)
@@ -304,11 +296,9 @@ export default function ProblemSubmitForm() {
           </div>
           <div>
             <h1 className="text-balance text-3xl font-bold tracking-tight md:text-4xl">
-              Share a problem worth solving
+              Share a problem
             </h1>
-            <p className="text-muted-foreground mt-2 text-balance text-lg">
-              Every breakthrough starts with someone noticing what's broken. What have you seen?
-            </p>
+            <p className="text-muted-foreground mt-1">What's broken that needs fixing?</p>
           </div>
         </div>
       </div>
@@ -338,10 +328,10 @@ export default function ProblemSubmitForm() {
                 </FormLabel>
                 <FormControl>
                   <div className="relative">
-                    <Input placeholder="e.g., Solar mesh networks for 1.7B people without internet" className="text-base" {...field} />
+                    <Input placeholder="e.g., Small businesses can't afford carbon tracking software" className="text-base pr-16" {...field} />
                     <div
                       className={cn(
-                        "absolute right-3 top-1/2 -translate-y-1/2 text-xs tabular-nums",
+                        "absolute right-3 top-1/2 -translate-y-1/2 text-xs tabular-nums text-muted-foreground",
                         titleLength > 90 && titleLength <= 100 && "text-orange-500",
                         titleLength > 100 && "text-destructive",
                       )}
@@ -350,7 +340,6 @@ export default function ProblemSubmitForm() {
                     </div>
                   </div>
                 </FormControl>
-                <FormDescription>What's the moonshot? Make it count.</FormDescription>
                 {forkData && forkValidation && (
                   <div
                     className={cn(
@@ -381,14 +370,14 @@ export default function ProblemSubmitForm() {
                 <FormControl>
                   <div className="relative">
                     <Textarea
-                      placeholder="e.g., 1.7B people lack electricity but have phones. Solar mesh networks: internet + power for $10/household vs. $3K traditional. $170B market. Climate migration makes this urgent."
+                      placeholder="Who has this problem? How big is it? Why does it matter now?"
                       rows={3}
-                      className="resize-none text-base"
+                      className="resize-none text-base pb-8"
                       {...field}
                     />
                     <div
                       className={cn(
-                        "absolute bottom-3 right-3 text-xs tabular-nums",
+                        "absolute bottom-3 right-3 text-xs tabular-nums text-muted-foreground",
                         pitchLength > 250 && pitchLength <= 280 && "text-orange-500",
                         pitchLength > 280 && "text-destructive",
                       )}
@@ -397,7 +386,6 @@ export default function ProblemSubmitForm() {
                     </div>
                   </div>
                 </FormControl>
-                <FormDescription>Scale, urgency, metrics. Make every character count.</FormDescription>
                 {forkData && forkValidation && (
                   <div
                     className={cn(
@@ -422,22 +410,20 @@ export default function ProblemSubmitForm() {
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-base">
-                  Full Description <span className="text-destructive">*</span>
-                </FormLabel>
+                <div className="flex items-baseline justify-between">
+                  <FormLabel className="text-base">
+                    Full Description <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <span className="text-xs text-muted-foreground">Markdown supported</span>
+                </div>
                 <FormControl>
                   <Textarea
-                    placeholder="Paint the vision. What does the world look like when this is solved?&#10;&#10;The Problem: Who's suffering? What's broken? Real numbers.&#10;&#10;Why Now: What's changed? New tech? Regulatory shift? Cultural moment?&#10;&#10;The Opportunity: Market size, competitive landscape.&#10;&#10;Validation: User interviews? Data? Your story?"
-                    rows={10}
+                    placeholder="Go deeper: What's broken today? Who's affected and how badly? What would solving this unlock? Any validation or data you have?"
+                    rows={8}
                     className="text-base"
                     {...field}
                   />
                 </FormControl>
-                <FormDescription className="flex items-center gap-2">
-                  <span>Tell the story. Back it with data.</span>
-                  <span className="text-muted-foreground/60">•</span>
-                  <span className="text-muted-foreground/80">Markdown supported</span>
-                </FormDescription>
                 {forkData && forkValidation && (
                   <div
                     className={cn(
@@ -458,12 +444,7 @@ export default function ProblemSubmitForm() {
 
           {/* Supporting Deck/Presentation (Optional) */}
           <div className="space-y-4">
-            <div>
-              <FormLabel className="text-base">Supporting Deck or Presentation (Optional)</FormLabel>
-              <p className="text-muted-foreground text-sm mt-1">
-                Share a detailed presentation for more context.
-              </p>
-            </div>
+            <FormLabel className="text-base">Deck or Presentation</FormLabel>
 
             {/* Toggle between link and file */}
             <div className="flex gap-2">
@@ -479,7 +460,7 @@ export default function ProblemSubmitForm() {
                 className="flex items-center gap-2"
               >
                 <LinkIcon className="h-4 w-4" />
-                Link to Deck
+                Add Link
               </Button>
               <Button
                 type="button"
@@ -493,7 +474,7 @@ export default function ProblemSubmitForm() {
                 className="flex items-center gap-2"
               >
                 <Upload className="h-4 w-4" />
-                Upload File
+                Upload
               </Button>
               {(deckType === "link" || deckType === "file") && (
                 <Button
@@ -522,14 +503,11 @@ export default function ProblemSubmitForm() {
                   <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
                     <FormControl>
                       <Input
-                        placeholder="https://docs.google.com/presentation/... or https://pitch.com/..."
+                        placeholder="https://..."
                         className="text-base"
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      Google Slides, Pitch, Notion, or any public link
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -540,12 +518,9 @@ export default function ProblemSubmitForm() {
             {deckType === "file" && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                 {!uploadedFile ? (
-                  <label className="border-input hover:border-primary flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 transition-colors">
-                    <Upload className="text-muted-foreground h-8 w-8" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium">Click to upload or drag and drop</p>
-                      <p className="text-muted-foreground text-xs mt-1">PDF, PPT, or PPTX (max 25MB)</p>
-                    </div>
+                  <label className="border-input hover:border-primary flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors">
+                    <Upload className="text-muted-foreground h-6 w-6" />
+                    <p className="text-muted-foreground text-sm">PDF, PPT, PPTX (max 25MB)</p>
                     <input
                       type="file"
                       className="hidden"
@@ -624,21 +599,24 @@ export default function ProblemSubmitForm() {
 
           {/* Industry Tags */}
           <div className="space-y-3">
-            <FormLabel className="text-base">Industry Tags (optional)</FormLabel>
-            <p className="text-muted-foreground text-sm">Up to 5 tags</p>
+            <div className="flex items-baseline justify-between">
+              <FormLabel className="text-base">Tags</FormLabel>
+              <span className="text-xs text-muted-foreground">Up to 5</span>
+            </div>
 
             {/* Selected Tags */}
             {selectedTags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2" role="list" aria-label="Selected tags">
                 {selectedTags.map((tag) => (
                   <button
                     key={tag}
                     type="button"
                     onClick={() => removeTag(tag)}
+                    aria-label={`Remove ${tag} tag`}
                     className="bg-primary/10 text-primary hover:bg-primary/20 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors"
                   >
                     {tag}
-                    <span className="text-primary/60">×</span>
+                    <span className="text-primary/60" aria-hidden="true">×</span>
                   </button>
                 ))}
               </div>
@@ -646,12 +624,13 @@ export default function ProblemSubmitForm() {
 
             {/* Suggested Tags */}
             {selectedTags.length < 5 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2" role="list" aria-label="Suggested tags">
                 {SUGGESTED_TAGS.filter((tag) => !selectedTags.includes(tag)).map((tag) => (
                   <button
                     key={tag}
                     type="button"
                     onClick={() => toggleTag(tag)}
+                    aria-label={`Add ${tag} tag`}
                     className="border-input hover:border-primary hover:bg-primary/5 rounded-full border px-3 py-1 text-sm transition-colors"
                   >
                     {tag}
@@ -673,15 +652,15 @@ export default function ProblemSubmitForm() {
                       addCustomTag()
                     }
                   }}
+                  aria-label="Custom tag input"
                   className="max-w-xs"
                 />
-                <Button type="button" variant="outline" onClick={addCustomTag}>
+                <Button type="button" variant="outline" onClick={addCustomTag} aria-label="Add custom tag">
                   Add
                 </Button>
               </div>
             )}
 
-            {selectedTags.length >= 5 && <p className="text-muted-foreground text-sm">Maximum 5 tags reached</p>}
           </div>
 
           {/* Privacy & Involvement */}

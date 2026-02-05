@@ -53,7 +53,15 @@ export async function POST(
     }
 
     // Update user based on action
-    let updateData: any = {};
+    let updateData: {
+      isSuspended?: boolean
+      suspendedAt?: Date | null
+      suspendedUntil?: Date | null
+      suspensionReason?: string | null
+      isBanned?: boolean
+      bannedAt?: Date | null
+      banReason?: string | null
+    } = {};
     let actionType = '';
 
     switch (action) {

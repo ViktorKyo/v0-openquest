@@ -22,6 +22,8 @@ const problems = trendingProblems.map((problem) => {
     author: {
       name: problem.author.username,
       avatar: problem.author.avatarUrl,
+      isYC: problem.author.isYC,
+      isWeekendFund: problem.author.isWeekendFund,
     },
     timeAgo,
     categoryColor: getCategoryColor(problem.category),

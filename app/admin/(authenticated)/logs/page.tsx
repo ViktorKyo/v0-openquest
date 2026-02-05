@@ -27,7 +27,7 @@ interface AdminLog {
   targetType: string
   targetId: string
   notes: string | null
-  metadata: any
+  metadata: Record<string, unknown> | null
   createdAt: string
   adminName: string | null
   adminEmail: string | null

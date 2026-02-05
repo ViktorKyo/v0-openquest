@@ -219,7 +219,8 @@ export default function AdminProblemsPage() {
               <TableHead>Category</TableHead>
               <TableHead>Author</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Upvotes</TableHead>
+              <TableHead className="text-center">Upvotes</TableHead>
+              <TableHead className="text-center">Comments</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -227,13 +228,13 @@ export default function AdminProblemsPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   Loading problems...
                 </TableCell>
               </TableRow>
             ) : problems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   No problems found
                 </TableCell>
               </TableRow>
@@ -259,7 +260,10 @@ export default function AdminProblemsPage() {
                     </div>
                   </TableCell>
                   <TableCell>{getStatusBadge(problem.status)}</TableCell>
-                  <TableCell className="text-right">{problem.upvotes}</TableCell>
+                  <TableCell className="text-center">{problem.upvotes}</TableCell>
+                  <TableCell className="text-center">
+                    <span className="text-muted-foreground">{problem.commentCount}</span>
+                  </TableCell>
                   <TableCell>
                     {new Date(problem.createdAt).toLocaleDateString()}
                   </TableCell>

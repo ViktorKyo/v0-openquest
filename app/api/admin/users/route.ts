@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/admin-auth';
 import { db } from '@/lib/db/supabase';
 import { users } from '@/lib/db/schema';
-import { or, ilike, desc, asc, sql, eq } from 'drizzle-orm';
+import { and, or, ilike, desc, asc, sql, eq } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
   try {
@@ -47,9 +47,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (conditions.length > 0) {
-      query = query.where(
-        conditions.length === 1 ? conditions[0] : sql`${conditions.join(' AND ')}`
-      );
+      query = query.where(and(...conditions));
     }
 
     // Apply sorting

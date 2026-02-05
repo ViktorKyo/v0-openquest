@@ -1,21 +1,23 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react"
 import { useRouter } from "next/navigation"
 
 interface User {
   id: string
   email: string
-  name: string
+  name: string | null
+  avatarUrl: string | null
 }
 
 interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>
   signup: (email: string, password: string, name: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
+  refreshSession: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -25,47 +27,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  // Check for stored auth on mount
-  useEffect(() => {
-    const storedUser = localStorage.getItem("openquest_user")
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
+  // Check session on mount
+  const refreshSession = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/session")
+      const data = await response.json()
+
+      if (data.authenticated && data.user) {
+        setUser(data.user)
+      } else {
+        setUser(null)
+      }
+    } catch (error) {
+      setUser(null)
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }, [])
 
-  const login = async (email: string, password: string) => {
-    // Mock authentication - in production, this would call your API
-    await new Promise((resolve) => setTimeout(resolve, 800)) // Simulate network delay
+  useEffect(() => {
+    refreshSession()
+  }, [refreshSession])
 
-    // Mock user data
-    const mockUser: User = {
-      id: Math.random().toString(36).substring(7),
-      email,
-      name: email.split("@")[0], // Use email prefix as name
+  const login = async (email: string, password: string, rememberMe: boolean = false) => {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, rememberMe }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || "Login failed")
     }
 
-    setUser(mockUser)
-    localStorage.setItem("openquest_user", JSON.stringify(mockUser))
+    setUser(data.user)
   }
 
   const signup = async (email: string, password: string, name: string) => {
-    // Mock authentication - in production, this would call your API
-    await new Promise((resolve) => setTimeout(resolve, 800)) // Simulate network delay
+    const response = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
+    })
 
-    const mockUser: User = {
-      id: Math.random().toString(36).substring(7),
-      email,
-      name,
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || "Signup failed")
     }
 
-    setUser(mockUser)
-    localStorage.setItem("openquest_user", JSON.stringify(mockUser))
+    setUser(data.user)
   }
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+    } catch (error) {
+      // Continue with logout even if API call fails
+    }
+
     setUser(null)
-    localStorage.removeItem("openquest_user")
     router.push("/")
   }
 
@@ -78,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         signup,
         logout,
+        refreshSession,
       }}
     >
       {children}

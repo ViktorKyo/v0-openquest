@@ -33,3 +33,21 @@ export const loginLimiter = rateLimit({
   interval: 60 * 60 * 1000, // 1 hour
   uniqueTokenPerInterval: 500, // Max 500 unique IPs tracked
 });
+
+// Rate limiter for user login (5 attempts per hour per IP)
+export const userLoginLimiter = rateLimit({
+  interval: 60 * 60 * 1000, // 1 hour
+  uniqueTokenPerInterval: 500,
+});
+
+// Rate limiter for user signup (3 attempts per hour per IP)
+export const signupLimiter = rateLimit({
+  interval: 60 * 60 * 1000, // 1 hour
+  uniqueTokenPerInterval: 500,
+});
+
+// Rate limiter for password reset (3 attempts per hour per email)
+export const passwordResetLimiter = rateLimit({
+  interval: 60 * 60 * 1000, // 1 hour
+  uniqueTokenPerInterval: 500,
+});

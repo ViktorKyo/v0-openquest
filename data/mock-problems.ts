@@ -7,14 +7,38 @@
 import { ycRfsProblems, ycAuthor } from "./yc-rfs-problems"
 import { weekendFundProblems, weekendFundAuthor } from "./weekend-fund-problems"
 
+interface RegularProblem {
+  id: number | string
+  title: string
+  elevatorPitch: string
+  fullDescription: string
+  author: {
+    username: string
+    avatarUrl: string
+    isYC?: boolean
+    isWeekendFund?: boolean
+    verified?: boolean
+  }
+  category: string
+  industryTags: string[]
+  upvotes: number
+  commentCount: number
+  builderCount: number
+  investorCount: number
+  createdAt: Date
+  isAnonymous: boolean
+  involvement: "want-build" | "already-building" | "just-sharing" | "want-to-work"
+}
+
 // Regular user problems (empty for now - to be added gradually)
-const regularProblems: any[] = []
+const regularProblems: RegularProblem[] = []
 
 // Transform YC problems to match the regular problem format
 const ycProblems = ycRfsProblems.map((problem, index) => ({
   id: problem.id,
   title: problem.title,
   elevatorPitch: problem.elevatorPitch,
+  fullDescription: problem.fullDescription,
   author: {
     username: ycAuthor.username,
     avatarUrl: ycAuthor.avatar,
@@ -22,6 +46,7 @@ const ycProblems = ycRfsProblems.map((problem, index) => ({
     verified: true,
   },
   category: getCategoryDisplayName(problem.category),
+  industryTags: problem.industryTags,
   upvotes: 150 + index * 20, // Simulate varying popularity
   commentCount: 10 + index * 3,
   builderCount: 5 + index * 2,
@@ -32,6 +57,7 @@ const ycProblems = ycRfsProblems.map((problem, index) => ({
   isYCRFS: true,
   ycQuarter: problem.quarter,
   ycPartner: problem.ycPartner,
+  originalUrl: problem.originalUrl,
 }))
 
 // Transform Weekend Fund problems to match the regular problem format
@@ -39,6 +65,7 @@ const weekendFundProblemsTransformed = weekendFundProblems.map((problem, index) 
   id: problem.id,
   title: problem.title,
   elevatorPitch: problem.elevatorPitch,
+  fullDescription: problem.fullDescription,
   author: {
     username: weekendFundAuthor.username,
     avatarUrl: weekendFundAuthor.avatar,
@@ -46,6 +73,7 @@ const weekendFundProblemsTransformed = weekendFundProblems.map((problem, index) 
     verified: true,
   },
   category: getCategoryDisplayName(problem.category),
+  industryTags: problem.industryTags,
   upvotes: 120 + index * 15, // Simulate varying popularity
   commentCount: 8 + index * 2,
   builderCount: 3 + index,
@@ -56,6 +84,7 @@ const weekendFundProblemsTransformed = weekendFundProblems.map((problem, index) 
   isWeekendFundRFS: true,
   wfPublishedDate: problem.publishedDate,
   wfAuthors: problem.authors,
+  originalUrl: problem.originalUrl,
 }))
 
 // Helper to map category slugs to display names

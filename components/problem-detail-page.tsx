@@ -1,23 +1,33 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeft, ChevronUp, MoreVertical, MessageCircle } from "lucide-react"
+import { ArrowLeft, ChevronUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Textarea } from "@/components/ui/textarea"
-import { Separator } from "@/components/ui/separator"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { CommentsSection } from "@/components/comments-section"
+import { useComments } from "@/hooks/use-comments"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { AuthorIntentTags } from "@/components/author-intent-tags"
 import { GetInvolvedSection } from "@/components/get-involved-section"
+import { InstitutionalAuthor } from "@/components/institutional-author"
 import { LoginPromptModal } from "@/components/login-prompt-modal"
+import { PendingEngagementModal } from "@/components/pending-engagement-modal"
 import { useAuth } from "@/contexts/auth-context"
-import type { InvestmentTier, BuildStatus, Visibility, RoleInterest } from "@/types/engagement"
+import {
+  getPendingEngagement,
+  clearPendingEngagement,
+  type PendingEngagement,
+  type BuildFormData,
+  type InvestFormData,
+  type JoinTeamFormData,
+} from "@/lib/pending-engagement"
+import type { InvestmentTier, InvestmentFocus, EngagementLevel, BuildStatus, BuildStage, LookingFor, RaisingStage, Visibility, RoleInterest } from "@/types/engagement"
 import { allProblems } from "@/data/mock-problems"
+import ReactMarkdown from "react-markdown"
 
 // Helper to get category color
 function getCategoryColor(category: string): string {
@@ -59,6 +69,8 @@ const mockProblem = {
     name: "Sarah Chen",
     avatar: "/diverse-woman-portrait.png",
     isAnonymous: false,
+    isYC: false,
+    isWeekendFund: false,
   },
   upvotes: 142,
   elevatorPitch:
@@ -89,84 +101,19 @@ If 1% of US small businesses adopted a simple carbon tracking tool at $100/month
     investors: 12,
     followers: 34,
     users: [
-      { name: "Alex Kumar", avatar: "/man.jpg", type: "building" },
-      { name: "Maria Garcia", avatar: "/diverse-woman-portrait.png", type: "investor" },
-      { name: "James Wilson", avatar: "/man.jpg", type: "building" },
-      { name: "Lisa Zhang", avatar: "/diverse-woman-portrait.png", type: "investor" },
-      { name: "David Brown", avatar: "/man.jpg", type: "investor" },
+      { name: "Alex Kumar", avatar: "/man.jpg", type: "building" as const },
+      { name: "Maria Garcia", avatar: "/diverse-woman-portrait.png", type: "investor" as const },
+      { name: "James Wilson", avatar: "/man.jpg", type: "building" as const },
+      { name: "Lisa Zhang", avatar: "/diverse-woman-portrait.png", type: "investor" as const },
+      { name: "David Brown", avatar: "/man.jpg", type: "investor" as const },
     ],
   },
+  // Institutional source data (not applicable for regular problems)
+  isYCRFS: false,
+  ycQuarter: undefined as string | undefined,
+  isWeekendFundRFS: false,
+  wfPublishedDate: undefined as string | undefined,
 }
-
-const mockComments = [
-  {
-    id: 1,
-    author: { name: "Marcus Reid", avatar: "/man.jpg", initials: "MR" },
-    content:
-      "This is huge. I run a small marketing agency and we've been manually tracking this in spreadsheets. Would definitely pay for a simple solution.",
-    timeAgo: "1h ago",
-    upvotes: 12,
-    replies: [
-      {
-        id: 11,
-        author: { name: "Sarah Chen", avatar: "/diverse-woman-portrait.png", initials: "SC" },
-        content: "Thanks Marcus! What's the biggest pain point with the spreadsheet approach for you?",
-        timeAgo: "45m ago",
-        upvotes: 3,
-      },
-      {
-        id: 12,
-        author: { name: "Marcus Reid", avatar: "/man.jpg", initials: "MR" },
-        content:
-          "Mainly keeping it updated and making sure we're calculating emissions correctly. Plus it's hard to show progress over time.",
-        timeAgo: "30m ago",
-        upvotes: 5,
-      },
-    ],
-  },
-  {
-    id: 2,
-    author: { name: "Emily Watson", avatar: "/diverse-woman-portrait.png", initials: "EW" },
-    content: "Have you looked at Watershed or Persefoni? They might have SMB plans.",
-    timeAgo: "50m ago",
-    upvotes: 4,
-    replies: [],
-  },
-  {
-    id: 3,
-    author: { name: "Alex Kumar", avatar: "/man.jpg", initials: "AK" },
-    content:
-      "I'm actually building something in this space! Would love to chat. The key is making data input stupid simple - probably needs to integrate with accounting software.",
-    timeAgo: "40m ago",
-    upvotes: 18,
-    replies: [
-      {
-        id: 31,
-        author: { name: "Jordan Lee", avatar: "/diverse-group.png", initials: "JL" },
-        content: "QuickBooks integration would be killer. Most small biz expenses directly correlate to emissions.",
-        timeAgo: "35m ago",
-        upvotes: 8,
-      },
-    ],
-  },
-  {
-    id: 4,
-    author: { name: "Anonymous", avatar: "", initials: "A" },
-    content: "This market is more crowded than you think. Normative, Plan A, CarbonChain all targeting SMBs now.",
-    timeAgo: "25m ago",
-    upvotes: 6,
-    replies: [],
-  },
-  {
-    id: 5,
-    author: { name: "Rachel Adams", avatar: "/diverse-woman-portrait.png", initials: "RA" },
-    content:
-      "Love this. The B2B sales cycle for sustainability is brutal though. Most small businesses won't pay until they're required to report.",
-    timeAgo: "15m ago",
-    upvotes: 9,
-    replies: [],
-  },
-]
 
 export function ProblemDetailPage({ problemId }: { problemId?: string }) {
   const router = useRouter()
@@ -187,6 +134,8 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
       name: problemData.author.username,
       avatar: problemData.author.avatarUrl,
       isAnonymous: problemData.isAnonymous,
+      isYC: (problemData.author as any).isYC,
+      isWeekendFund: (problemData.author as any).isWeekendFund,
     },
     upvotes: problemData.upvotes,
     elevatorPitch: problemData.elevatorPitch,
@@ -194,7 +143,7 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
     alreadyBuildingSupport: (problemData as any).alreadyBuildingSupport,
     wantBuildBlocker: (problemData as any).wantBuildBlocker,
     wantToWorkInvolvement: (problemData as any).wantToWorkInvolvement,
-    fullDescription: `## The Problem\n\n${problemData.elevatorPitch}\n\n## Details\n\nThis is a real problem that needs solving.`,
+    fullDescription: problemData.fullDescription || `## The Problem\n\n${problemData.elevatorPitch}\n\n## Details\n\nThis is a real problem that needs solving.`,
     engagement: {
       building: problemData.builderCount || 0,
       buildingAnonymous: 0,
@@ -202,14 +151,20 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
       followers: 0,
       users: [],
     },
+    // Institutional source data
+    isYCRFS: (problemData as any).isYCRFS,
+    ycQuarter: (problemData as any).ycQuarter,
+    isWeekendFundRFS: (problemData as any).isWeekendFundRFS,
+    wfPublishedDate: (problemData as any).wfPublishedDate,
   } : mockProblem
 
   const [upvoted, setUpvoted] = useState(false)
   const [upvoteCount, setUpvoteCount] = useState(problem.upvotes)
-  const [commentText, setCommentText] = useState("")
-  const [comments, setComments] = useState(mockComments)
-  const [replyingTo, setReplyingTo] = useState<number | null>(null)
-  const [replyText, setReplyText] = useState("")
+
+  // Comments hook
+  const { comments, addComment, editComment, deleteComment, upvoteComment } = useComments({
+    problemId: String(problem.id),
+  })
 
   // Engagement states
   const [isFollowing, setIsFollowing] = useState(false)
@@ -220,6 +175,60 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
   // Auth modal state
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
   const [loginPromptAction, setLoginPromptAction] = useState("")
+
+  // Pending engagement state (for deferred auth flow)
+  const [pendingEngagement, setPendingEngagement] = useState<PendingEngagement | null>(null)
+  const [showPendingConfirmModal, setShowPendingConfirmModal] = useState(false)
+
+  // Check for pending engagement when user becomes authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const pending = getPendingEngagement()
+    if (pending && pending.problemId === String(problem.id)) {
+      setPendingEngagement(pending)
+      setShowPendingConfirmModal(true)
+    }
+  }, [isAuthenticated, problem.id])
+
+  // Handle confirming a pending engagement
+  const handleConfirmPendingEngagement = () => {
+    if (!pendingEngagement) return
+
+    switch (pendingEngagement.type) {
+      case 'build':
+        handleBuild(pendingEngagement.data as BuildFormData)
+        break
+      case 'invest':
+        handleInvest(pendingEngagement.data as InvestFormData)
+        break
+      case 'joinTeam':
+        handleJoinTeam(pendingEngagement.data as JoinTeamFormData)
+        break
+      case 'upvote':
+        if (!upvoted) {
+          setUpvoted(true)
+          setUpvoteCount(upvoteCount + 1)
+        }
+        break
+      case 'follow':
+        if (!isFollowing) {
+          setIsFollowing(true)
+        }
+        break
+    }
+
+    clearPendingEngagement()
+    setPendingEngagement(null)
+    setShowPendingConfirmModal(false)
+  }
+
+  // Handle dismissing a pending engagement
+  const handleDismissPendingEngagement = () => {
+    clearPendingEngagement()
+    setPendingEngagement(null)
+    setShowPendingConfirmModal(false)
+  }
 
   const requireAuth = (action: string, callback: () => void) => {
     if (!isAuthenticated) {
@@ -237,62 +246,23 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
     })
   }
 
-  const handleInvest = (data: { tier: InvestmentTier; note: string; isPublic: boolean }) => {
-    console.log("Investment data:", data)
+  const handleInvest = (_data: { tier: InvestmentTier; focus: InvestmentFocus; engagementLevel: EngagementLevel; note: string; visibility: Visibility; linkedIn?: string }) => {
     setHasInvested(true)
-    // In a real app, this would make an API call
+    // TODO: Make API call to record investment interest with new fields
   }
 
-  const handleBuild = (data: { status: BuildStatus; visibility: Visibility; description: string }) => {
-    console.log("Build data:", data)
+  const handleBuild = (_data: { status: BuildStatus; stage: BuildStage; visibility: Visibility; lookingFor: LookingFor[]; projectLink: string; description: string; whyYou: string; progressSoFar?: string; linkedIn?: string; twitter?: string; website?: string; raisingStage?: RaisingStage }) => {
     setIsBuilding(true)
-    // In a real app, this would make an API call
+    // TODO: Make API call to record builder interest with enhanced data
   }
 
-  const handleJoinTeam = (data: { roleInterest: RoleInterest; skills: string[]; intro: string }) => {
-    console.log("Join team data:", data)
+  const handleJoinTeam = (_data: { roleInterest: RoleInterest; skills: string[]; intro: string; linkedIn?: string; twitter?: string; portfolio?: string }) => {
     setHasApplied(true)
-    // In a real app, this would make an API call
+    // TODO: Make API call to record team application with profile links
   }
 
   const handleFollow = () => {
     setIsFollowing(!isFollowing)
-  }
-
-  const handleCommentSubmit = () => {
-    if (!commentText.trim()) return
-
-    const newComment = {
-      id: comments.length + 1,
-      author: { name: "You", avatar: "/abstract-geometric-shapes.png", initials: "YO" },
-      content: commentText,
-      timeAgo: "just now",
-      upvotes: 0,
-      replies: [],
-    }
-
-    setComments([newComment, ...comments])
-    setCommentText("")
-  }
-
-  const handleReplySubmit = (commentId: number) => {
-    if (!replyText.trim()) return
-
-    const newReply = {
-      id: commentId * 10 + 100,
-      author: { name: "You", avatar: "/abstract-geometric-shapes.png", initials: "YO" },
-      content: replyText,
-      timeAgo: "just now",
-      upvotes: 0,
-    }
-
-    setComments(
-      comments.map((comment) =>
-        comment.id === commentId ? { ...comment, replies: [...(comment.replies || []), newReply] } : comment,
-      ),
-    )
-    setReplyText("")
-    setReplyingTo(null)
   }
 
   const handleFork = () => {
@@ -381,26 +351,18 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
               <h1 className="mb-4 text-3xl font-bold leading-tight text-balance lg:text-4xl">{problem.title}</h1>
 
               <div className="flex items-center gap-3">
-                {problem.author.name.toLowerCase() === "ycombinator" || problem.author.name.toLowerCase() === "y combinator" ? (
-                  <>
-                    <div className="flex size-10 items-center justify-center rounded-full bg-orange-500">
-                      <span className="text-lg font-bold text-white">Y</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">{problem.author.name}</p>
-                      <p className="text-sm text-muted-foreground">Y Combinator RFS</p>
-                    </div>
-                  </>
-                ) : problem.author.name.toLowerCase() === "weekendfund" || problem.author.name.toLowerCase() === "weekend fund" ? (
-                  <>
-                    <div className="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-orange-500">
-                      <span className="text-lg">☀️</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">{problem.author.name}</p>
-                      <p className="text-sm text-muted-foreground">Weekend Fund RFS</p>
-                    </div>
-                  </>
+                {problem.isYCRFS ? (
+                  <InstitutionalAuthor
+                    type="yc"
+                    quarter={problem.ycQuarter}
+                    size="md"
+                  />
+                ) : problem.isWeekendFundRFS ? (
+                  <InstitutionalAuthor
+                    type="weekend-fund"
+                    year={problem.wfPublishedDate}
+                    size="md"
+                  />
                 ) : (
                   <>
                     <Avatar className="size-10">
@@ -439,42 +401,58 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
                 <CardTitle className="text-lg">Full Description</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4 text-[15px] leading-relaxed">
-                  <div
-                    dangerouslySetInnerHTML={{
-                      __html:
-                        problem.fullDescription
-                          .split('\n\n')
-                          .map(section => {
-                            // Handle headers (##)
-                            if (section.startsWith('## ')) {
-                              return `<h3 class="text-lg font-semibold text-foreground mt-6 mb-3 first:mt-0">${section.replace('## ', '')}</h3>`
-                            }
-                            // Handle bullet points with bold labels
-                            if (section.includes('\n- **')) {
-                              const items = section.split('\n- ')
-                                .filter(item => item.trim())
-                                .map(item => {
-                                  const boldMatch = item.match(/^\*\*(.*?)\*\*(.*)/)
-                                  if (boldMatch) {
-                                    return `<li class="ml-4"><span class="font-medium text-foreground">${boldMatch[1]}</span><span class="text-muted-foreground">${boldMatch[2]}</span></li>`
-                                  }
-                                  return `<li class="ml-4 text-muted-foreground">${item}</li>`
-                                })
-                              return `<ul class="space-y-2 list-none">${items.join('')}</ul>`
-                            }
-                            // Handle regular paragraphs with inline bold
-                            return `<p class="text-muted-foreground">${section.replace(/\*\*(.*?)\*\*/g, '<span class="font-medium text-foreground">$1</span>')}</p>`
-                          })
-                          .join(''),
-                    }}
-                  />
-                </div>
+                <ReactMarkdown
+                  components={{
+                    h1: ({ children }) => (
+                      <h2 className="text-xl font-semibold text-foreground mt-8 mb-4 first:mt-0">{children}</h2>
+                    ),
+                    h2: ({ children }) => (
+                      <h3 className="text-lg font-semibold text-foreground mt-8 mb-3 first:mt-0">{children}</h3>
+                    ),
+                    h3: ({ children }) => (
+                      <h4 className="text-base font-semibold text-foreground mt-6 mb-2 first:mt-0">{children}</h4>
+                    ),
+                    p: ({ children }) => (
+                      <p className="text-muted-foreground leading-relaxed mb-4">{children}</p>
+                    ),
+                    ul: ({ children }) => (
+                      <ul className="space-y-2 mb-6 ml-1">{children}</ul>
+                    ),
+                    ol: ({ children }) => (
+                      <ol className="space-y-2 mb-6 ml-1 list-decimal list-inside">{children}</ol>
+                    ),
+                    li: ({ children }) => (
+                      <li className="flex gap-3 text-muted-foreground leading-relaxed">
+                        <span className="text-muted-foreground/60 select-none">•</span>
+                        <span>{children}</span>
+                      </li>
+                    ),
+                    strong: ({ children }) => (
+                      <strong className="font-semibold text-foreground">{children}</strong>
+                    ),
+                    em: ({ children }) => (
+                      <em className="italic text-muted-foreground">{children}</em>
+                    ),
+                    blockquote: ({ children }) => (
+                      <blockquote className="border-l-2 border-muted-foreground/30 pl-4 my-4 text-muted-foreground italic">{children}</blockquote>
+                    ),
+                    code: ({ children }) => (
+                      <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>
+                    ),
+                    a: ({ href, children }) => (
+                      <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
+                    ),
+                  }}
+                >
+                  {problem.fullDescription}
+                </ReactMarkdown>
               </CardContent>
             </Card>
 
             {/* Get Involved Section */}
             <GetInvolvedSection
+              problemId={String(problem.id)}
+              problemTitle={problem.title}
               authorInvolvement={problem.involvement}
               alreadyBuildingSupport={problem.alreadyBuildingSupport}
               isAnonymous={problem.author.isAnonymous}
@@ -501,151 +479,15 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
             />
 
             {/* Comments Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageCircle className="h-5 w-5" />
-                  Discussion ({comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})
-                </CardTitle>
-              </CardHeader>
-
-              <Separator />
-
-              <CardContent className="pt-6 space-y-6">
-                {/* Comment Input */}
-                <div className="space-y-3">
-                  <Textarea
-                    placeholder="Share your thoughts..."
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    className="min-h-24"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setCommentText("")}>
-                      Cancel
-                    </Button>
-                    <Button size="sm" onClick={handleCommentSubmit} disabled={!commentText.trim()}>
-                      Post Comment
-                    </Button>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Comments List */}
-                <div className="space-y-6">
-                  {comments.map((comment) => (
-                    <div key={comment.id} className="space-y-4">
-                      {/* Main Comment */}
-                      <div className="flex gap-3">
-                        <Avatar className="size-8 shrink-0">
-                          <AvatarImage src={comment.author.avatar || "/placeholder.svg"} />
-                          <AvatarFallback className="text-xs">{comment.author.initials}</AvatarFallback>
-                        </Avatar>
-
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-sm">{comment.author.name}</span>
-                            <span className="text-xs text-muted-foreground">{comment.timeAgo}</span>
-                          </div>
-
-                          <p className="text-sm text-muted-foreground leading-relaxed">{comment.content}</p>
-
-                          <div className="flex items-center gap-4 text-sm">
-                            <button className="flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground">
-                              <ChevronUp className="h-4 w-4" />
-                              <span>{comment.upvotes}</span>
-                            </button>
-                            <button
-                              className="text-muted-foreground transition-colors hover:text-foreground"
-                              onClick={() => setReplyingTo(comment.id)}
-                            >
-                              Reply
-                            </button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button className="text-muted-foreground transition-colors hover:text-foreground">
-                                  <MoreVertical className="h-4 w-4" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem>Edit</DropdownMenuItem>
-                                <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-
-                          {/* Reply Input */}
-                          {replyingTo === comment.id && (
-                            <div className="space-y-2 pt-2">
-                              <Textarea
-                                placeholder="Write a reply..."
-                                value={replyText}
-                                onChange={(e) => setReplyText(e.target.value)}
-                                className="min-h-20"
-                              />
-                              <div className="flex justify-end gap-2">
-                                <Button variant="outline" size="sm" onClick={() => setReplyingTo(null)}>
-                                  Cancel
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleReplySubmit(comment.id)}
-                                  disabled={!replyText.trim()}
-                                >
-                                  Reply
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Nested Replies */}
-                      {comment.replies && comment.replies.length > 0 && (
-                        <div className="ml-11 space-y-4 border-l-2 border-border/50 pl-4">
-                          {comment.replies.map((reply) => (
-                            <div key={reply.id} className="flex gap-3">
-                              <Avatar className="size-8 shrink-0">
-                                <AvatarImage src={reply.author.avatar || "/placeholder.svg"} />
-                                <AvatarFallback className="text-xs">{reply.author.initials}</AvatarFallback>
-                              </Avatar>
-
-                              <div className="flex-1 min-w-0 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-sm">{reply.author.name}</span>
-                                  <span className="text-xs text-muted-foreground">{reply.timeAgo}</span>
-                                </div>
-
-                                <p className="text-sm text-muted-foreground leading-relaxed">{reply.content}</p>
-
-                                <div className="flex items-center gap-4 text-sm">
-                                  <button className="flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground">
-                                    <ChevronUp className="h-4 w-4" />
-                                    <span>{reply.upvotes}</span>
-                                  </button>
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <button className="text-muted-foreground transition-colors hover:text-foreground">
-                                        <MoreVertical className="h-4 w-4" />
-                                      </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem>Edit</DropdownMenuItem>
-                                      <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <CommentsSection
+              problemId={String(problem.id)}
+              comments={comments}
+              onAddComment={addComment}
+              onEditComment={editComment}
+              onDeleteComment={deleteComment}
+              onUpvoteComment={upvoteComment}
+              returnUrl={pathname}
+            />
           </div>
         </div>
       </main>
@@ -657,6 +499,17 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
         actionDescription={loginPromptAction}
         returnUrl={pathname}
       />
+
+      {/* Pending Engagement Confirmation Modal */}
+      {pendingEngagement && (
+        <PendingEngagementModal
+          isOpen={showPendingConfirmModal}
+          onClose={handleDismissPendingEngagement}
+          onConfirm={handleConfirmPendingEngagement}
+          actionType={pendingEngagement.type}
+          problemTitle={pendingEngagement.problemTitle}
+        />
+      )}
     </div>
   )
 }

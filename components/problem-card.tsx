@@ -7,6 +7,7 @@ import { ChevronUp, MessageCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { AuthorIntentTags } from "@/components/author-intent-tags"
+import { InstitutionalLogo } from "@/components/institutional-author"
 
 interface Problem {
   id: number | string
@@ -18,6 +19,8 @@ interface Problem {
   author: {
     name: string
     avatar: string
+    isYC?: boolean
+    isWeekendFund?: boolean
   }
   timeAgo: string
   categoryColor: string
@@ -109,19 +112,15 @@ export function ProblemCard({ problem }: { problem: Problem }) {
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {problem.author.name.toLowerCase() === "ycombinator" || problem.author.name.toLowerCase() === "y combinator" ? (
+                {problem.author.isYC ? (
                   <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-orange-500 text-[11px] font-bold text-white">
-                      Y
-                    </span>
-                    <span className="font-medium">{problem.author.name}</span>
+                    <InstitutionalLogo type="yc" className="size-6" />
+                    <span className="font-medium">Y Combinator</span>
                   </span>
-                ) : problem.author.name.toLowerCase() === "weekendfund" || problem.author.name.toLowerCase() === "weekend fund" ? (
+                ) : problem.author.isWeekendFund ? (
                   <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 text-sm">
-                      ☀️
-                    </span>
-                    <span className="font-medium">{problem.author.name}</span>
+                    <InstitutionalLogo type="weekend-fund" className="size-6" />
+                    <span className="font-medium">Weekend Fund</span>
                   </span>
                 ) : (
                   <>

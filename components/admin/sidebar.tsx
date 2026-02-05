@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   AlertCircle,
   Users,
+  MessageCircle,
   BarChart,
   FileText,
   Settings,
@@ -45,6 +46,12 @@ const menuItems = [
     label: "Users",
     href: "/admin/users",
     icon: Users,
+    roles: ["super_admin", "moderator"],
+  },
+  {
+    label: "Comments",
+    href: "/admin/comments",
+    icon: MessageCircle,
     roles: ["super_admin", "moderator"],
   },
   {

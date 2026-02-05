@@ -4,18 +4,17 @@ import { loginLimiter } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
-    // Rate limiting (disabled in development)
-    const ip = req.ip || req.headers.get('x-forwarded-for') || 'unknown';
+    // Rate limiting
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 
-    // TODO: Re-enable rate limiting in production
-    // try {
-    //   await loginLimiter.check(5, ip); // 5 attempts per hour
-    // } catch {
-    //   return NextResponse.json(
-    //     { error: 'Too many login attempts. Please try again in an hour.' },
-    //     { status: 429 }
-    //   );
-    // }
+    try {
+      await loginLimiter.check(5, ip); // 5 attempts per hour
+    } catch {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Please try again in an hour.' },
+        { status: 429 }
+      );
+    }
 
     const { adminId, rememberMe } = await req.json();
 
@@ -27,8 +26,9 @@ export async function POST(req: NextRequest) {
     const session = await authenticateAdmin(adminId);
 
     if (!session) {
-      // Log failed attempt
-      console.log(`Failed login attempt for admin ID: ${adminId} from IP: ${ip}`);
+      // Security audit: log failed attempts for monitoring brute force attacks
+      // eslint-disable-next-line no-console
+      console.warn(`[SECURITY] Failed login attempt for admin ID: ${adminId.slice(0, 10)}... from IP: ${ip}`);
       return NextResponse.json({ error: 'Invalid admin ID' }, { status: 401 });
     }
 
