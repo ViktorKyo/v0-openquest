@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSession } from '@/lib/admin-auth';
+import { getAdminSession, hasPermission } from '@/lib/admin-auth';
 import { db } from '@/lib/db/supabase';
 import { comments, adminActions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -12,6 +12,14 @@ export async function POST(
     const session = await getAdminSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if user has moderation permission
+    if (!hasPermission(session, 'moderator')) {
+      return NextResponse.json(
+        { error: 'You do not have permission to moderate comments' },
+        { status: 403 }
+      );
     }
 
     const { id } = await params;
@@ -61,7 +69,7 @@ export async function POST(
 
     // Log the action
     await db.insert(adminActions).values({
-      adminId: session.adminId,
+      adminId: session.adminDbId,
       actionType: `comment_${action}`,
       targetType: 'comment',
       targetId: id,

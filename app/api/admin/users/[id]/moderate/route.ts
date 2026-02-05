@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getAdminSession();
@@ -16,7 +16,7 @@ export async function POST(
     }
 
     // Check if user has moderation permission
-    if (!hasPermission(session.role, 'manage_users')) {
+    if (!hasPermission(session, 'moderator')) {
       return NextResponse.json(
         { error: 'You do not have permission to manage users' },
         { status: 403 }
@@ -29,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
-    const userId = params.id;
+    const { id: userId } = await params;
 
     // Get the user
     const [user] = await db

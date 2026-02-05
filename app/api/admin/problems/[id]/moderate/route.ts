@@ -7,7 +7,7 @@ import { sendModerationEmail } from '@/lib/email/send';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getAdminSession();
@@ -17,7 +17,7 @@ export async function POST(
     }
 
     // Check if user has moderation permission
-    if (!hasPermission(session.role, 'moderate_problems')) {
+    if (!hasPermission(session, 'moderator')) {
       return NextResponse.json(
         { error: 'You do not have permission to moderate problems' },
         { status: 403 }
@@ -30,7 +30,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
-    const problemId = params.id;
+    const { id: problemId } = await params;
 
     // Get the problem
     const [problem] = await db
@@ -51,11 +51,15 @@ export async function POST(
     }
 
     // Get problem author info for email
-    const [author] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, problem.authorId))
-      .limit(1);
+    let author = null;
+    if (problem.authorId) {
+      const [authorResult] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, problem.authorId))
+        .limit(1);
+      author = authorResult;
+    }
 
     // Update problem status
     const newStatus = action === 'approve' ? 'approved' : 'rejected';

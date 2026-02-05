@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 // Update admin (deactivate/activate)
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getAdminSession();
@@ -24,7 +24,7 @@ export async function PATCH(
     }
 
     const { isActive } = await req.json();
-    const adminId = params.id;
+    const { id: adminId } = await params;
 
     // Prevent self-deactivation
     if (adminId === session.adminDbId) {
