@@ -1,14 +1,21 @@
 {
-  "name": "my-v0-project",
+  "name": "openquest",
   "version": "0.1.0",
+  "description": "Product Hunt for Problems - A platform for sharing and discovering problems worth solving",
   "private": true,
+  "author": "Viktor Kyosev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ViktorKyo/v0-openquest.git"
+  },
   "scripts": {
-    "build": "next build",
     "dev": "next dev",
-    "lint": "eslint .",
+    "build": "next build",
     "start": "next start",
-    "db:studio": "drizzle-kit studio",
-    "db:push": "drizzle-kit push"
+    "lint": "eslint .",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
