@@ -33,7 +33,7 @@ export async function sendModerationEmail({
         ? '🎉 Your problem has been approved!'
         : 'Update on your problem submission';
 
-    const html =
+    const html = await (
       action === 'approve'
         ? render(
             ProblemApprovedEmail({
@@ -48,7 +48,8 @@ export async function sendModerationEmail({
               problemTitle,
               rejectionReason: notes || 'No specific reason provided.',
             })
-          );
+          )
+    );
 
     const data = await resend.emails.send({
       from: 'OpenQuest <notifications@openquest.app>',

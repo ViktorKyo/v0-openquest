@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  getUserByEmail,
   verifyPassword,
   setUserSession,
+  getUserWithProfileById,
   updateUserLastLogin,
   checkUserStatus,
   validateEmail,
 } from '@/lib/user-auth';
-import { userLoginLimiter } from '@/lib/rate-limit';
+import { checkUserLoginRateLimit } from '@/lib/rate-limit';
 import { db } from '@/lib/db/supabase';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 
     try {
-      await userLoginLimiter.check(5, ip); // 5 attempts per hour per IP
+      await checkUserLoginRateLimit(ip);
     } catch {
       return NextResponse.json(
         { error: 'Too many login attempts. Please try again in an hour.' },
@@ -88,7 +88,11 @@ export async function POST(req: NextRequest) {
     await updateUserLastLogin(userWithPassword.id);
 
     // Set session cookie
-    await setUserSession(userWithPassword.id, rememberMe === true);
+    await setUserSession(userWithPassword.id, rememberMe === true, {
+      ipAddress: ip,
+      userAgent: req.headers.get('user-agent') || undefined,
+    });
+    const user = await getUserWithProfileById(userWithPassword.id);
 
     return NextResponse.json({
       success: true,
@@ -97,6 +101,9 @@ export async function POST(req: NextRequest) {
         email: userWithPassword.email,
         name: userWithPassword.name,
         avatarUrl: userWithPassword.avatarUrl,
+        status: user?.status || 'active',
+        hasCompletedOnboarding: user?.hasCompletedOnboarding || false,
+        profileCompletionScore: user?.profileCompletionScore || 0,
       },
     });
   } catch (error) {

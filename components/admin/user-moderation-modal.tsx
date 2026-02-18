@@ -28,7 +28,7 @@ interface User {
   email: string
   isSuspended: boolean
   isBanned: boolean
-  createdAt: Date
+  createdAt: string | Date
 }
 
 interface UserModerationModalProps {
@@ -74,15 +74,15 @@ export function UserModerationModal({
 
   const availableActions = []
   if (!user.isSuspended) {
-    availableActions.push({ value: "suspend", label: "Suspend", icon: UserX, color: "orange" })
+    availableActions.push({ value: "suspend", label: "Suspend", icon: UserX, iconClass: "text-orange-500" })
   } else {
-    availableActions.push({ value: "unsuspend", label: "Unsuspend", icon: UserCheck, color: "green" })
+    availableActions.push({ value: "unsuspend", label: "Unsuspend", icon: UserCheck, iconClass: "text-green-500" })
   }
 
   if (!user.isBanned) {
-    availableActions.push({ value: "ban", label: "Ban", icon: Ban, color: "red" })
+    availableActions.push({ value: "ban", label: "Ban", icon: Ban, iconClass: "text-red-500" })
   } else {
-    availableActions.push({ value: "unban", label: "Unban", icon: Shield, color: "blue" })
+    availableActions.push({ value: "unban", label: "Unban", icon: Shield, iconClass: "text-blue-500" })
   }
 
   return (
@@ -127,7 +127,7 @@ export function UserModerationModal({
                       className="h-auto py-4 flex flex-col items-center gap-2"
                       onClick={() => setAction(actionOption.value)}
                     >
-                      <Icon className={`h-6 w-6 text-${actionOption.color}-500`} />
+                      <Icon className={`h-6 w-6 ${actionOption.iconClass}`} />
                       <span className="font-semibold">{actionOption.label}</span>
                     </Button>
                   )

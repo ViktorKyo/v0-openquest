@@ -1,6 +1,18 @@
+import type { Metadata } from "next"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Compass, Heart, Users, Zap } from "lucide-react"
+
+export const metadata: Metadata = {
+  title: "About",
+  description: "OpenQuest is a community-driven platform for discovering and sharing problems worth solving. Learn about our mission to connect founders with real problems.",
+  alternates: { canonical: "/about" },
+  openGraph: {
+    title: "About OpenQuest",
+    description: "A community-driven platform for discovering and sharing problems worth solving.",
+    url: "/about",
+  },
+}
 
 export default function AboutPage() {
   return (

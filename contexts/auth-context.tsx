@@ -1,13 +1,16 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 
 interface User {
   id: string
   email: string
   name: string | null
   avatarUrl: string | null
+  status?: "active" | "suspended" | "banned"
+  hasCompletedOnboarding?: boolean
+  profileCompletionScore?: number
 }
 
 interface AuthContextType {
@@ -25,7 +28,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const router = useRouter()
+  const pathname = usePathname()
+  const shouldAutoRefreshSession = pathname !== "/"
 
   // Check session on mount
   const refreshSession = useCallback(async () => {
@@ -46,8 +50,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    if (!shouldAutoRefreshSession) {
+      setIsLoading(false)
+      return
+    }
     refreshSession()
-  }, [refreshSession])
+  }, [refreshSession, shouldAutoRefreshSession])
+
+  // Re-check session when user returns to the tab (catches expired sessions)
+  useEffect(() => {
+    if (!shouldAutoRefreshSession) return
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSession()
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [refreshSession, shouldAutoRefreshSession])
 
   const login = async (email: string, password: string, rememberMe: boolean = false) => {
     const response = await fetch("/api/auth/login", {
@@ -78,7 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(data.error || "Signup failed")
     }
 
-    setUser(data.user)
+    if (data.user) {
+      setUser(data.user)
+    }
   }
 
   const logout = async () => {
@@ -89,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setUser(null)
-    router.push("/")
+    window.location.href = "/"
   }
 
   return (

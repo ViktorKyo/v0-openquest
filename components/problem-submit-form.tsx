@@ -1,18 +1,21 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { ArrowLeft, Sparkles, Link as LinkIcon, Upload, X, FileText, AlertCircle } from "lucide-react"
+import { ArrowLeft, Sparkles, Link as LinkIcon, Upload, X, FileText, AlertCircle, Trash2, Twitter } from "lucide-react"
+import { extractTweetId, MAX_TWEETS_PER_PROBLEM } from "@/lib/tweet-utils"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { SubmissionSuccessModal } from "@/components/submission-success-modal"
+import { Header } from "@/components/header"
 import { ForkBanner } from "@/components/fork-banner"
 import { validateFork, type ForkValidationResult } from "@/lib/similarity"
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -27,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { cn } from "@/lib/utils"
+import { COMMENT_MAX_LENGTH } from "@/types/comment"
 
 const CATEGORIES = [
   { value: "moonshots", label: "Moonshots", color: "bg-purple-500" },
@@ -56,6 +60,53 @@ const SUGGESTED_TAGS = [
   "Developer Tools",
 ]
 
+const ALREADY_BUILDING_SUPPORT_OPTIONS = [
+  { value: "awareness", label: "I need more awareness/visibility" },
+  { value: "founding-team", label: "I'm looking for founding team members" },
+  { value: "cofounder", label: "I'm looking for a technical/business co-founder" },
+  { value: "capital", label: "I need more capital/investment" },
+] as const
+
+const blankFormValues = {
+  title: "",
+  pitch: "",
+  description: "",
+  category: "",
+  tags: [],
+  anonymous: false,
+  involvement: "just-sharing" as const,
+  wantBuildBlocker: [],
+  alreadyBuildingSupport: [],
+  wantToWorkInvolvement: [],
+  deckType: "none" as const,
+  deckLink: "",
+  creatorLaunchComment: "",
+}
+
+type AlreadyBuildingSupport = (typeof ALREADY_BUILDING_SUPPORT_OPTIONS)[number]["value"]
+type DraftLifecycleState = "idle" | "creating" | "editing" | "autosaving" | "saved" | "submitting"
+
+interface DraftSummary {
+  id: string
+  title: string
+  updatedAt: string
+  pitchPreview: string
+  missingRequired: Array<"title" | "pitch" | "description" | "category" | "involvement" | "creatorLaunchComment">
+  isAnonymous: boolean
+  completenessScore: number
+  isFork: boolean
+  category: string
+}
+
+const MISSING_FIELD_LABELS: Record<DraftSummary["missingRequired"][number], string> = {
+  title: "Title",
+  pitch: "Pitch",
+  description: "Description",
+  category: "Category",
+  involvement: "Involvement",
+  creatorLaunchComment: "Creator comment",
+}
+
 const problemSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title must be 100 characters or less"),
   pitch: z.string().min(1, "Elevator pitch is required").max(280, "Elevator pitch must be 280 characters or less"),
@@ -64,26 +115,55 @@ const problemSchema = z.object({
   tags: z.array(z.string()).max(5, "Maximum 5 tags allowed").optional(),
   anonymous: z.boolean().optional(),
   involvement: z.enum(["want-build", "already-building", "just-sharing", "want-to-work"]),
-  // Follow-up fields
-  wantBuildBlocker: z.enum(["need-capital", "need-cofounder"]).optional(),
-  alreadyBuildingSupport: z.array(z.string()).optional(),
-  wantToWorkInvolvement: z.enum(["volunteer", "full-time"]).optional(),
-  // Deck upload fields
+  wantBuildBlocker: z.array(z.enum(["need-capital", "need-cofounder"])).optional(),
+  alreadyBuildingSupport: z.array(z.enum(["awareness", "founding-team", "cofounder", "capital"])).optional(),
+  wantToWorkInvolvement: z.array(z.enum(["volunteer", "full-time"])).optional(),
   deckType: z.enum(["link", "file", "none"]).optional(),
   deckLink: z.string().url("Please enter a valid URL").optional().or(z.literal("")),
+  creatorLaunchComment: z.string().max(COMMENT_MAX_LENGTH, `Comment must be ${COMMENT_MAX_LENGTH} characters or less`).optional(),
+}).superRefine((data, ctx) => {
+  if (!data.anonymous && !(data.creatorLaunchComment || "").trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Creator context comment is required for non-anonymous submissions",
+      path: ["creatorLaunchComment"],
+    })
+  }
 })
 
 type ProblemFormData = z.infer<typeof problemSchema>
 
+interface DraftPayloadResponse {
+  draftId: string
+  status: "draft"
+  savedAt: string
+  submissionVersion: number
+}
+
 export default function ProblemSubmitForm() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [customTag, setCustomTag] = useState("")
-  const [alreadyBuildingSupportOptions, setAlreadyBuildingSupportOptions] = useState<string[]>([])
+  const [alreadyBuildingSupportOptions, setAlreadyBuildingSupportOptions] = useState<AlreadyBuildingSupport[]>([])
   const [deckType, setDeckType] = useState<"link" | "file" | "none">("none")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showForkValidationError, setShowForkValidationError] = useState(false)
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false)
+  const [draftLifecycleState, setDraftLifecycleState] = useState<DraftLifecycleState>("idle")
+  const [draftActionError, setDraftActionError] = useState<string | null>(null)
+  const [isDraftActionLoading, setIsDraftActionLoading] = useState(false)
+  const [drafts, setDrafts] = useState<DraftSummary[]>([])
+  const [archiveTargetDraft, setArchiveTargetDraft] = useState<DraftSummary | null>(null)
+  const [isArchiveActionLoading, setIsArchiveActionLoading] = useState(false)
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
+  const [currentSubmissionVersion, setCurrentSubmissionVersion] = useState<number | null>(null)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [statusTick, setStatusTick] = useState(0)
+  const [hasInitializedDrafts, setHasInitializedDrafts] = useState(false)
   const [forkValidation, setForkValidation] = useState<ForkValidationResult | null>(null)
+  const [tweetUrls, setTweetUrls] = useState<string[]>([])
+  const [newTweetUrl, setNewTweetUrl] = useState("")
+  const [tweetUrlError, setTweetUrlError] = useState<string | null>(null)
   const [forkData, setForkData] = useState<{
     originalId: number
     originalTitle: string
@@ -97,100 +177,529 @@ export default function ProblemSubmitForm() {
   const searchParams = useSearchParams()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const forkId = searchParams.get("fork")
+  const isHydratingFromServer = useRef(false)
 
   const form = useForm<ProblemFormData>({
     resolver: zodResolver(problemSchema),
-    defaultValues: {
-      title: "",
-      pitch: "",
-      description: "",
-      category: "",
-      tags: [],
-      anonymous: false,
-      involvement: "just-sharing",
-      wantBuildBlocker: undefined,
-      alreadyBuildingSupport: [],
-      wantToWorkInvolvement: undefined,
-      deckType: "none",
-      deckLink: "",
-    },
+    defaultValues: blankFormValues,
   })
 
   const titleLength = form.watch("title")?.length || 0
   const pitchLength = form.watch("pitch")?.length || 0
   const currentInvolvement = form.watch("involvement")
 
-  // Save form data to localStorage when it changes
   useEffect(() => {
-    const formData = form.getValues()
-    localStorage.setItem(
-      "openquest_draft",
-      JSON.stringify({
-        ...formData,
+    if (!lastSavedAt || draftLifecycleState !== "saved") return
+    const interval = setInterval(() => setStatusTick((prev) => prev + 1), 30_000)
+    return () => clearInterval(interval)
+  }, [lastSavedAt, draftLifecycleState])
+
+  const draftStatusLabel = useMemo(() => {
+    void statusTick
+
+    if (draftLifecycleState === "creating") return "Creating draft..."
+    if (draftLifecycleState === "editing") return "Editing"
+    if (draftLifecycleState === "autosaving") return "Autosaving..."
+    if (draftLifecycleState === "submitting") return "Submitting..."
+    if (draftLifecycleState === "saved" && lastSavedAt) {
+      const diffMs = Date.now() - lastSavedAt.getTime()
+      const diffMinutes = Math.max(0, Math.floor(diffMs / 60_000))
+      if (diffMinutes === 0) return "Saved just now"
+      if (diffMinutes === 1) return "Saved 1 min ago"
+      return `Saved ${diffMinutes} mins ago`
+    }
+    return "Idle"
+  }, [draftLifecycleState, lastSavedAt, statusTick])
+
+  const categoryLabelToSlug = useMemo(
+    () =>
+      CATEGORIES.reduce<Record<string, string>>((acc, category) => {
+        acc[category.label.toLowerCase()] = category.value
+        return acc
+      }, {}),
+    [],
+  )
+
+  const mapCategoryToSlug = useCallback(
+    (category?: string | null) => {
+      const normalized = (category || "").trim().toLowerCase()
+      return categoryLabelToSlug[normalized] || normalized || "other"
+    },
+    [categoryLabelToSlug],
+  )
+
+  const normalizeServerDraft = useCallback(
+    (draft: Partial<ProblemFormData> & { tags?: string[]; alreadyBuildingSupport?: string[]; category?: string }) => {
+      const safeSupport = (draft.alreadyBuildingSupport || []).filter((value): value is AlreadyBuildingSupport =>
+        ALREADY_BUILDING_SUPPORT_OPTIONS.some((opt) => opt.value === value),
+      )
+
+      return {
+        title: draft.title || "",
+        pitch: draft.pitch || "",
+        description: draft.description || "",
+        category: mapCategoryToSlug(draft.category),
+        tags: draft.tags || [],
+        anonymous: draft.anonymous || false,
+        involvement: draft.involvement || "just-sharing",
+        wantBuildBlocker: Array.isArray(draft.wantBuildBlocker) ? draft.wantBuildBlocker : [],
+        alreadyBuildingSupport: safeSupport,
+        wantToWorkInvolvement: Array.isArray(draft.wantToWorkInvolvement) ? draft.wantToWorkInvolvement : [],
+        deckType: draft.deckType || "none",
+        deckLink: draft.deckLink || "",
+        creatorLaunchComment: draft.creatorLaunchComment || "",
+      } satisfies ProblemFormData
+    },
+    [mapCategoryToSlug],
+  )
+
+  const resetToBlankDraft = useCallback(() => {
+    form.reset(blankFormValues)
+    setSelectedTags([])
+    setAlreadyBuildingSupportOptions([])
+    setDeckType("none")
+    setUploadedFile(null)
+    setCurrentDraftId(null)
+    setCurrentSubmissionVersion(null)
+    setLastSavedAt(null)
+    setDraftLifecycleState("idle")
+    setTweetUrls([])
+    localStorage.removeItem("openquest_draft")
+  }, [form])
+
+  const buildDraftPayload = useCallback(
+    (
+      data: ProblemFormData,
+      overrides?: {
+        tags?: string[]
+        alreadyBuildingSupport?: AlreadyBuildingSupport[]
+        deckType?: "link" | "file" | "none"
+        forkedFromProblemId?: string
+        tweetUrls?: string[]
+      },
+    ) => ({
+      title: data.title,
+      pitch: data.pitch,
+      description: data.description,
+      category: data.category,
+      tags: overrides?.tags || selectedTags,
+      anonymous: data.anonymous,
+      involvement: data.involvement,
+      wantBuildBlocker: data.wantBuildBlocker,
+      alreadyBuildingSupport: overrides?.alreadyBuildingSupport || alreadyBuildingSupportOptions,
+      wantToWorkInvolvement: data.wantToWorkInvolvement,
+      deckType: overrides?.deckType || deckType,
+      deckLink: (overrides?.deckType || deckType) === "link" ? data.deckLink : "",
+      forkedFromProblemId: overrides?.forkedFromProblemId || (forkData?.originalId ? String(forkData.originalId) : undefined),
+      creatorLaunchComment: data.anonymous ? "" : (data.creatorLaunchComment || "").trim(),
+      tweetUrls: overrides?.tweetUrls ?? tweetUrls,
+    }),
+    [selectedTags, alreadyBuildingSupportOptions, deckType, forkData?.originalId, tweetUrls],
+  )
+
+  const syncLocalFallbackDraft = useCallback(
+    (data: ProblemFormData) => {
+      localStorage.setItem(
+        "openquest_draft",
+        JSON.stringify({
+          ...data,
+          tags: selectedTags,
+          alreadyBuildingSupport: alreadyBuildingSupportOptions,
+          deckType,
+          tweetUrls,
+          timestamp: Date.now(),
+        }),
+      )
+    },
+    [selectedTags, alreadyBuildingSupportOptions, deckType, tweetUrls],
+  )
+
+  const redirectToLoginWithDraft = useCallback(
+    (data: ProblemFormData) => {
+      const snapshot = {
+        ...data,
         tags: selectedTags,
         alreadyBuildingSupport: alreadyBuildingSupportOptions,
         deckType,
+        tweetUrls,
+        forkedFromProblemId: forkData?.originalId ? String(forkData.originalId) : undefined,
         timestamp: Date.now(),
-      }),
-    )
-  }, [form.watch(), selectedTags, alreadyBuildingSupportOptions, deckType])
+      }
+      localStorage.setItem("openquest_pending_auth_draft", JSON.stringify(snapshot))
+      localStorage.setItem("openquest_draft", JSON.stringify(snapshot))
+      router.push("/login?returnUrl=/submit")
+    },
+    [selectedTags, alreadyBuildingSupportOptions, deckType, tweetUrls, forkData?.originalId, router],
+  )
 
-  // Restore form data on mount or load fork data
+  const loadDrafts = useCallback(async () => {
+    if (!isAuthenticated) return []
+
+    const response = await fetch("/api/problems/drafts", { cache: "no-store" })
+    if (!response.ok) {
+      throw new Error("Failed to fetch drafts")
+    }
+
+    const data = await response.json()
+    const draftList = Array.isArray(data.drafts) ? (data.drafts as DraftSummary[]) : []
+    setDrafts(draftList)
+    return draftList
+  }, [isAuthenticated])
+
+  const hydrateDraft = useCallback(
+    async (draftId: string) => {
+      setDraftActionError(null)
+      isHydratingFromServer.current = true
+      try {
+        const response = await fetch(`/api/problems/drafts/${draftId}`, { cache: "no-store" })
+        if (!response.ok) {
+          throw new Error("Failed to load draft")
+        }
+
+        const data = await response.json()
+        const normalizedDraft = normalizeServerDraft(data.draft || {})
+
+        form.reset(normalizedDraft)
+        setSelectedTags(normalizedDraft.tags || [])
+        setAlreadyBuildingSupportOptions((normalizedDraft.alreadyBuildingSupport || []) as AlreadyBuildingSupport[])
+        setDeckType(normalizedDraft.deckType || "none")
+        setTweetUrls(data.draft?.tweetUrls || [])
+        setCurrentDraftId(draftId)
+        setCurrentSubmissionVersion(typeof data?.draft?.submissionVersion === "number" ? data.draft.submissionVersion : null)
+        setLastSavedAt(data?.draft?.updatedAt ? new Date(data.draft.updatedAt) : null)
+        setDraftLifecycleState("editing")
+        localStorage.setItem("openquest_draft", JSON.stringify({ ...normalizedDraft, timestamp: Date.now() }))
+      } finally {
+        isHydratingFromServer.current = false
+      }
+    },
+    [form, normalizeServerDraft],
+  )
+
+  const saveDraftToServer = useCallback(
+    async (mode: "manual" | "autosave") => {
+      const data = form.getValues()
+      if (!isAuthenticated) {
+        redirectToLoginWithDraft(data)
+        return null
+      }
+
+      setDraftActionError(null)
+      setIsDraftActionLoading(mode === "manual")
+      setDraftLifecycleState(currentDraftId ? (mode === "autosave" ? "autosaving" : "editing") : "creating")
+
+      const payload = buildDraftPayload(data)
+
+      let draftId = currentDraftId
+      let savedAt: string | undefined
+      let submissionVersion = currentSubmissionVersion
+      if (!draftId) {
+        const createResponse = await fetch("/api/problems/drafts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, dedupe: true }),
+        })
+
+        if (!createResponse.ok) {
+          throw new Error("Failed to create draft")
+        }
+
+        const created = (await createResponse.json()) as DraftPayloadResponse
+        draftId = created.draftId
+        savedAt = created.savedAt
+        submissionVersion = created.submissionVersion
+        setCurrentDraftId(draftId)
+        setCurrentSubmissionVersion(created.submissionVersion)
+      } else {
+        if (typeof submissionVersion !== "number") {
+          throw new Error("Draft version unavailable. Please reload this draft and try again.")
+        }
+
+        const updateResponse = await fetch(`/api/problems/drafts/${draftId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, submissionVersion }),
+        })
+
+        if (!updateResponse.ok) {
+          let errorMessage = "Failed to save draft"
+          try {
+            const errorPayload = await updateResponse.json()
+            if (typeof errorPayload?.currentSubmissionVersion === "number") {
+              setCurrentSubmissionVersion(errorPayload.currentSubmissionVersion)
+            }
+            if (typeof errorPayload?.error === "string" && errorPayload.error.length > 0) {
+              errorMessage = errorPayload.error
+            }
+          } catch {
+            // keep fallback message
+          }
+          throw new Error(errorMessage)
+        }
+        const updated = (await updateResponse.json()) as DraftPayloadResponse
+        savedAt = updated.savedAt
+        submissionVersion = updated.submissionVersion
+        setCurrentSubmissionVersion(updated.submissionVersion)
+      }
+
+      form.reset(data)
+      if (mode === "manual") {
+        await loadDrafts()
+      }
+      setDraftLifecycleState("saved")
+      setLastSavedAt(savedAt ? new Date(savedAt) : new Date())
+      setIsDraftActionLoading(false)
+      syncLocalFallbackDraft(data)
+      return draftId
+    },
+    [
+      form,
+      isAuthenticated,
+      redirectToLoginWithDraft,
+      currentDraftId,
+      currentSubmissionVersion,
+      buildDraftPayload,
+      loadDrafts,
+      syncLocalFallbackDraft,
+    ],
+  )
+
+  const discardCurrentDraft = useCallback(async () => {
+    if (!currentDraftId) {
+      resetToBlankDraft()
+      return
+    }
+
+    setIsDraftActionLoading(true)
+    const response = await fetch(`/api/problems/drafts/${currentDraftId}/abandon`, { method: "POST" })
+    if (!response.ok) {
+      setIsDraftActionLoading(false)
+      throw new Error("Failed to discard draft")
+    }
+
+    resetToBlankDraft()
+    setIsDraftActionLoading(false)
+    await loadDrafts()
+  }, [currentDraftId, resetToBlankDraft, loadDrafts])
+
+  const handleManualSave = useCallback(async () => {
+    try {
+      await saveDraftToServer("manual")
+    } catch (error) {
+      setIsDraftActionLoading(false)
+      setDraftLifecycleState("editing")
+      setDraftActionError(error instanceof Error ? error.message : "Failed to save draft")
+    }
+  }, [saveDraftToServer])
+
+  const handleLoadDraft = useCallback(
+    async (draftId: string) => {
+      try {
+        await hydrateDraft(draftId)
+      } catch (error) {
+        setDraftActionError(error instanceof Error ? error.message : "Failed to load draft")
+      }
+    },
+    [hydrateDraft],
+  )
+
+  const archiveDraftById = useCallback(
+    async (draftId: string) => {
+      setIsArchiveActionLoading(true)
+      setDraftActionError(null)
+      try {
+        const response = await fetch(`/api/problems/drafts/${draftId}/abandon`, { method: "POST" })
+        if (!response.ok) {
+          throw new Error("Failed to archive draft")
+        }
+
+        if (currentDraftId === draftId) {
+          resetToBlankDraft()
+        }
+        await loadDrafts()
+      } finally {
+        setIsArchiveActionLoading(false)
+      }
+    },
+    [currentDraftId, loadDrafts, resetToBlankDraft],
+  )
+
+  // Save local fallback draft when core fields change.
   useEffect(() => {
-    // Check if we're forking a problem
+    const values = form.getValues()
+    syncLocalFallbackDraft(values)
+  }, [
+    form,
+    form.watch("title"),
+    form.watch("pitch"),
+    form.watch("description"),
+    form.watch("category"),
+    form.watch("involvement"),
+    form.watch("deckLink"),
+    form.watch("anonymous"),
+    form.watch("creatorLaunchComment"),
+    selectedTags,
+    alreadyBuildingSupportOptions,
+    deckType,
+    syncLocalFallbackDraft,
+  ])
+
+  // Initial hydration: fork payload or local fallback draft for anonymous users.
+  useEffect(() => {
     if (forkId) {
       const savedFork = localStorage.getItem("openquest_fork")
       if (savedFork) {
         try {
           const fork = JSON.parse(savedFork)
           setForkData(fork)
-
-          // Pre-fill form with fork data
           form.reset({
-            title: fork.title,
-            pitch: fork.elevatorPitch,
-            description: fork.fullDescription,
-            category: fork.category.toLowerCase().replace(/\s+&\s+/g, "-").replace(/\s+/g, "-"),
-            involvement: "want-build", // Default to "I want to build this"
-            anonymous: false,
-            tags: [],
-            deckType: "none",
-            deckLink: "",
+            ...blankFormValues,
+            title: fork.title || "",
+            pitch: fork.elevatorPitch || "",
+            description: fork.fullDescription || "",
+            category: mapCategoryToSlug(fork.category),
+            involvement: "want-build",
           })
-
-          // Clear the fork data from localStorage after loading
           localStorage.removeItem("openquest_fork")
-        } catch (e) {
-          // Invalid fork data, ignore
+        } catch {
+          // Ignore invalid fork payload
         }
       }
-    } else {
-      // Not forking, check for saved draft
-      const savedDraft = localStorage.getItem("openquest_draft")
-      if (savedDraft) {
-        try {
-          const draft = JSON.parse(savedDraft)
-          // Only restore if less than 24 hours old
-          if (Date.now() - draft.timestamp < 24 * 60 * 60 * 1000) {
-            form.reset(draft)
-            setSelectedTags(draft.tags || [])
-            setAlreadyBuildingSupportOptions(draft.alreadyBuildingSupport || [])
-            setDeckType(draft.deckType || "none")
+      return
+    }
+
+    // If a pending auth draft exists, the authenticated resume effect owns restoration
+    if (localStorage.getItem("openquest_pending_auth_draft")) return
+
+    const savedDraft = localStorage.getItem("openquest_draft")
+    if (!savedDraft) return
+
+    try {
+      const draft = JSON.parse(savedDraft)
+      if (Date.now() - draft.timestamp < 24 * 60 * 60 * 1000) {
+        const normalized = normalizeServerDraft(draft)
+        form.reset(normalized)
+        setSelectedTags(normalized.tags || [])
+        setAlreadyBuildingSupportOptions((normalized.alreadyBuildingSupport || []) as AlreadyBuildingSupport[])
+        setDeckType(normalized.deckType || "none")
+        setTweetUrls(draft.tweetUrls || [])
+      }
+    } catch {
+      // Ignore invalid local fallback draft
+    }
+  }, [forkId, form, mapCategoryToSlug, normalizeServerDraft])
+
+  // Authenticated resume flow: merge pending local snapshot once, otherwise load latest draft.
+  // Strategy: "populate first, sync second" — always show user their data immediately from
+  // localStorage, then sync with the server in the background. Never let a server failure blank the form.
+  useEffect(() => {
+    if (authLoading || !isAuthenticated || hasInitializedDrafts) {
+      return
+    }
+
+    let cancelled = false
+
+    const init = async () => {
+      try {
+        const pendingRaw = localStorage.getItem("openquest_pending_auth_draft")
+        if (pendingRaw) {
+          const snapshot = JSON.parse(pendingRaw)
+          const normalized = normalizeServerDraft(snapshot)
+
+          const snapshotTags = Array.isArray(snapshot.tags) ? snapshot.tags : []
+          const snapshotSupport = (Array.isArray(snapshot.alreadyBuildingSupport) ? snapshot.alreadyBuildingSupport : [])
+            .filter((value: string): value is AlreadyBuildingSupport =>
+              ALREADY_BUILDING_SUPPORT_OPTIONS.some((option) => option.value === value),
+            )
+          const snapshotDeckType = snapshot.deckType === "link" || snapshot.deckType === "file" ? snapshot.deckType : "none" as const
+          const snapshotTweetUrls = Array.isArray(snapshot.tweetUrls) ? snapshot.tweetUrls : []
+
+          // IMMEDIATELY populate form from snapshot — user sees their data before any fetch
+          if (!cancelled) {
+            form.reset(normalized)
+            setSelectedTags(snapshotTags)
+            setAlreadyBuildingSupportOptions(snapshotSupport)
+            setDeckType(snapshotDeckType)
+            setTweetUrls(snapshotTweetUrls)
           }
-        } catch (e) {
-          // Invalid draft data, ignore
+
+          // Now try to create/merge server draft (best-effort — form is already populated)
+          try {
+            const createResponse = await fetch("/api/problems/drafts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: normalized.title,
+                pitch: normalized.pitch,
+                description: normalized.description,
+                category: normalized.category,
+                tags: snapshotTags,
+                anonymous: normalized.anonymous,
+                involvement: normalized.involvement,
+                wantBuildBlocker: normalized.wantBuildBlocker,
+                alreadyBuildingSupport: snapshotSupport,
+                wantToWorkInvolvement: normalized.wantToWorkInvolvement,
+                deckType: snapshotDeckType,
+                deckLink: snapshotDeckType === "link" ? (normalized.deckLink || "") : "",
+                forkedFromProblemId: typeof snapshot.forkedFromProblemId === "string" ? snapshot.forkedFromProblemId : undefined,
+                creatorLaunchComment: normalized.anonymous ? "" : (normalized.creatorLaunchComment || "").trim(),
+                tweetUrls: snapshotTweetUrls,
+                dedupe: true,
+              }),
+            })
+
+            if (createResponse.ok && !cancelled) {
+              const created = (await createResponse.json()) as DraftPayloadResponse
+              setCurrentDraftId(created.draftId)
+              setCurrentSubmissionVersion(created.submissionVersion)
+              setLastSavedAt(created.savedAt ? new Date(created.savedAt) : new Date())
+              setDraftLifecycleState("saved")
+              await loadDrafts()
+            }
+            // If POST fails: form already populated from snapshot, user can save manually
+          } catch {
+            // Server sync failed silently — form data is intact from snapshot
+          }
+
+          localStorage.removeItem("openquest_pending_auth_draft")
+        } else {
+          const draftList = await loadDrafts()
+          if (!cancelled && draftList.length > 0 && !forkId) {
+            await hydrateDraft(draftList[0].id)
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDraftActionError(error instanceof Error ? error.message : "Failed to initialize drafts")
+        }
+      } finally {
+        if (!cancelled) {
+          setHasInitializedDrafts(true)
         }
       }
     }
-  }, [forkId])
+
+    void init()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    authLoading,
+    isAuthenticated,
+    hasInitializedDrafts,
+    normalizeServerDraft,
+    form,
+    hydrateDraft,
+    loadDrafts,
+    forkId,
+  ])
 
   // Real-time fork validation
   useEffect(() => {
     if (!forkData) return
 
     const currentValues = form.getValues()
-
-    // Only validate if user has made some changes
     if (!currentValues.title && !currentValues.pitch && !currentValues.description) {
       return
     }
@@ -209,79 +718,135 @@ export default function ProblemSubmitForm() {
     )
 
     setForkValidation(validation)
-  }, [forkData, form.watch("title"), form.watch("pitch"), form.watch("description")])
+  }, [forkData, form, form.watch("title"), form.watch("pitch"), form.watch("description")])
 
-  const onSubmit = (data: ProblemFormData) => {
-    // Check if user is authenticated
-    if (!isAuthenticated) {
-      // Save current form data
-      localStorage.setItem(
-        "openquest_draft",
-        JSON.stringify({
-          ...data,
-          tags: selectedTags,
-          alreadyBuildingSupport: alreadyBuildingSupportOptions,
-          deckType,
-          timestamp: Date.now(),
-        }),
-      )
-      // Redirect to login with return URL
-      router.push("/login?returnUrl=/submit")
+  // Autosave server draft for authenticated users.
+  useEffect(() => {
+    if (!isAuthenticated || !hasInitializedDrafts || !currentDraftId || isHydratingFromServer.current) {
       return
     }
 
-    // Validate fork if this is a forked problem
+    if (!form.formState.isDirty || isDraftActionLoading || draftLifecycleState === "submitting") {
+      return
+    }
+
+    const timeout = setTimeout(async () => {
+      try {
+        await saveDraftToServer("autosave")
+      } catch {
+        setDraftActionError("Autosave failed. Your local draft is still preserved.")
+      }
+    }, 1200)
+
+    return () => clearTimeout(timeout)
+  }, [
+    form.formState.isDirty,
+    form.watch("title"),
+    form.watch("pitch"),
+    form.watch("description"),
+    form.watch("category"),
+    form.watch("involvement"),
+    form.watch("deckLink"),
+    form.watch("anonymous"),
+    form.watch("creatorLaunchComment"),
+    selectedTags,
+    alreadyBuildingSupportOptions,
+    deckType,
+    tweetUrls,
+    isAuthenticated,
+    hasInitializedDrafts,
+    currentDraftId,
+    isDraftActionLoading,
+    draftLifecycleState,
+    saveDraftToServer,
+  ])
+
+  const onSubmit = async (data: ProblemFormData) => {
+    setDraftActionError(null)
+
+    if (!isAuthenticated) {
+      redirectToLoginWithDraft(data)
+      return
+    }
+
     if (forkData && forkValidation && !forkValidation.isValid) {
       setShowForkValidationError(true)
       return
     }
 
-    // TODO: Submit to API
-    // const formPayload = {
-    //   ...data,
-    //   tags: selectedTags,
-    //   alreadyBuildingSupport: alreadyBuildingSupportOptions,
-    //   forkedFrom: forkData?.originalId,
-    // }
+    setIsDraftActionLoading(true)
+    setDraftLifecycleState("submitting")
 
-    // Show success modal
-    setShowSuccessModal(true)
+    try {
+      let draftId = currentDraftId
+      if (!draftId) {
+        draftId = await saveDraftToServer("manual")
+      } else if (form.formState.isDirty) {
+        await saveDraftToServer("manual")
+      }
 
-    // Clear draft
-    localStorage.removeItem("openquest_draft")
+      if (!draftId) {
+        throw new Error("Could not create draft for submission")
+      }
 
-    // In a real implementation, you would:
-    // 1. Upload the file to a storage service
-    // 2. Submit the problem data to your API
-    // 3. Handle success/error states
+      const response = await fetch(`/api/problems/drafts/${draftId}/submit`, {
+        method: "POST",
+      })
+
+      const responseBody = await response.json()
+      if (!response.ok) {
+        if (responseBody?.errors?.length) {
+          throw new Error(responseBody.errors.join(". "))
+        }
+        throw new Error(responseBody?.error || "Failed to submit draft")
+      }
+
+      localStorage.removeItem("openquest_draft")
+      localStorage.removeItem("openquest_pending_auth_draft")
+      setShowSuccessModal(true)
+      resetToBlankDraft()
+      await loadDrafts()
+      setIsDraftActionLoading(false)
+    } catch (error) {
+      setIsDraftActionLoading(false)
+      setDraftLifecycleState("editing")
+      setDraftActionError(error instanceof Error ? error.message : "Failed to submit draft")
+    }
   }
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) => {
-      if (prev.includes(tag)) {
-        return prev.filter((t) => t !== tag)
-      }
-      if (prev.length >= 5) {
-        return prev
-      }
-      return [...prev, tag]
+      const next = prev.includes(tag)
+        ? prev.filter((t) => t !== tag)
+        : prev.length >= 5
+          ? prev
+          : [...prev, tag]
+      form.setValue("tags", next, { shouldDirty: true })
+      return next
     })
   }
 
   const addCustomTag = () => {
     if (customTag.trim() && !selectedTags.includes(customTag.trim()) && selectedTags.length < 5) {
-      setSelectedTags((prev) => [...prev, customTag.trim()])
+      const next = [...selectedTags, customTag.trim()]
+      setSelectedTags(next)
+      form.setValue("tags", next, { shouldDirty: true })
       setCustomTag("")
     }
   }
 
   const removeTag = (tag: string) => {
-    setSelectedTags((prev) => prev.filter((t) => t !== tag))
+    setSelectedTags((prev) => {
+      const next = prev.filter((t) => t !== tag)
+      form.setValue("tags", next, { shouldDirty: true })
+      return next
+    })
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 md:py-12">
-      {/* Header */}
+    <>
+    <Header compact hideSubmitButton maxWidth="max-w-3xl" />
+    <div className="mx-auto max-w-3xl px-4 pt-24 pb-8 md:pb-12">
       <div className="mb-8">
         <Link
           href="/feed"
@@ -303,7 +868,77 @@ export default function ProblemSubmitForm() {
         </div>
       </div>
 
-      {/* Fork Banner */}
+      {isAuthenticated && (
+        <div className="mb-6 space-y-3 rounded-lg border p-4">
+          <div className="flex items-center justify-between gap-3">
+            {currentDraftId && (
+              <Button type="button" variant="outline" size="sm" onClick={resetToBlankDraft}>
+                Start New
+              </Button>
+            )}
+          </div>
+
+          {drafts.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">My Drafts</p>
+              <div className="space-y-2">
+                {drafts.map((draft) => (
+                  <div
+                    key={draft.id}
+                    className={cn(
+                      "w-full rounded-md border p-3 transition-colors",
+                      currentDraftId === draft.id ? "border-primary bg-primary/5" : "hover:bg-muted/40",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <button type="button" onClick={() => void handleLoadDraft(draft.id)} className="min-w-0 flex-1 text-left">
+                        <p className="truncate text-sm font-medium">{draft.title || "Untitled draft"}</p>
+                        <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">{draft.pitchPreview}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {draft.category} • Updated {new Date(draft.updatedAt).toLocaleString()}
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-1">
+                          <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
+                            {draft.completenessScore}% complete
+                          </span>
+                          {draft.isFork && (
+                            <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
+                              Fork
+                            </span>
+                          )}
+                          {draft.missingRequired.slice(0, 2).map((field) => (
+                            <span key={`${draft.id}-${field}`} className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
+                              Missing: {MISSING_FIELD_LABELS[field]}
+                            </span>
+                          ))}
+                          {draft.missingRequired.length > 2 && (
+                            <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
+                              +{draft.missingRequired.length - 2} more
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setArchiveTargetDraft(draft)}
+                        disabled={isArchiveActionLoading}
+                        className="shrink-0"
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        Archive
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
       {forkData && (
         <ForkBanner
           originalTitle={forkData.originalTitle}
@@ -314,10 +949,8 @@ export default function ProblemSubmitForm() {
         />
       )}
 
-      {/* Form */}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          {/* Title */}
           <FormField
             control={form.control}
             name="title"
@@ -358,7 +991,6 @@ export default function ProblemSubmitForm() {
             )}
           />
 
-          {/* Elevator Pitch */}
           <FormField
             control={form.control}
             name="pitch"
@@ -404,7 +1036,6 @@ export default function ProblemSubmitForm() {
             )}
           />
 
-          {/* Full Description */}
           <FormField
             control={form.control}
             name="description"
@@ -442,11 +1073,8 @@ export default function ProblemSubmitForm() {
             )}
           />
 
-          {/* Supporting Deck/Presentation (Optional) */}
           <div className="space-y-4">
             <FormLabel className="text-base">Deck or Presentation</FormLabel>
-
-            {/* Toggle between link and file */}
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -454,7 +1082,7 @@ export default function ProblemSubmitForm() {
                 size="sm"
                 onClick={() => {
                   setDeckType("link")
-                  form.setValue("deckType", "link")
+                  form.setValue("deckType", "link", { shouldDirty: true })
                   setUploadedFile(null)
                 }}
                 className="flex items-center gap-2"
@@ -468,8 +1096,8 @@ export default function ProblemSubmitForm() {
                 size="sm"
                 onClick={() => {
                   setDeckType("file")
-                  form.setValue("deckType", "file")
-                  form.setValue("deckLink", "")
+                  form.setValue("deckType", "file", { shouldDirty: true })
+                  form.setValue("deckLink", "", { shouldDirty: true })
                 }}
                 className="flex items-center gap-2"
               >
@@ -483,8 +1111,8 @@ export default function ProblemSubmitForm() {
                   size="sm"
                   onClick={() => {
                     setDeckType("none")
-                    form.setValue("deckType", "none")
-                    form.setValue("deckLink", "")
+                    form.setValue("deckType", "none", { shouldDirty: true })
+                    form.setValue("deckLink", "", { shouldDirty: true })
                     setUploadedFile(null)
                   }}
                   className="text-muted-foreground"
@@ -494,7 +1122,6 @@ export default function ProblemSubmitForm() {
               )}
             </div>
 
-            {/* Link Input */}
             {deckType === "link" && (
               <FormField
                 control={form.control}
@@ -502,11 +1129,7 @@ export default function ProblemSubmitForm() {
                 render={({ field }) => (
                   <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
                     <FormControl>
-                      <Input
-                        placeholder="https://..."
-                        className="text-base"
-                        {...field}
-                      />
+                      <Input placeholder="https://..." className="text-base" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -514,7 +1137,6 @@ export default function ProblemSubmitForm() {
               />
             )}
 
-            {/* File Upload */}
             {deckType === "file" && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                 {!uploadedFile ? (
@@ -528,7 +1150,6 @@ export default function ProblemSubmitForm() {
                       onChange={(e) => {
                         const file = e.target.files?.[0]
                         if (file) {
-                          // Check file size (25MB max)
                           if (file.size > 25 * 1024 * 1024) {
                             alert("File size must be less than 25MB")
                             return
@@ -546,9 +1167,7 @@ export default function ProblemSubmitForm() {
                       </div>
                       <div>
                         <p className="text-sm font-medium">{uploadedFile.name}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
+                        <p className="text-muted-foreground text-xs">{(uploadedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                       </div>
                     </div>
                     <Button
@@ -566,7 +1185,98 @@ export default function ProblemSubmitForm() {
             )}
           </div>
 
-          {/* Category */}
+          {/* Related Tweets */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-base font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Related Tweets
+              </p>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                Add tweets that discuss this problem (up to {MAX_TWEETS_PER_PROBLEM})
+              </p>
+            </div>
+
+            {tweetUrls.length > 0 && (
+              <div className="space-y-2">
+                {tweetUrls.map((url, index) => (
+                  <div key={index} className="flex items-center gap-2 rounded-lg border bg-secondary/50 px-3 py-2">
+                    <Twitter className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm truncate flex-1">{url}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => setTweetUrls((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tweetUrls.length < MAX_TWEETS_PER_PROBLEM && (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://x.com/user/status/..."
+                  value={newTweetUrl}
+                  onChange={(e) => {
+                    setNewTweetUrl(e.target.value)
+                    setTweetUrlError(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      const id = extractTweetId(newTweetUrl)
+                      if (!id) {
+                        setTweetUrlError("Please enter a valid tweet URL (x.com or twitter.com)")
+                        return
+                      }
+                      if (tweetUrls.some((u) => extractTweetId(u) === id)) {
+                        setTweetUrlError("This tweet has already been added")
+                        return
+                      }
+                      setTweetUrls((prev) => [...prev, newTweetUrl.trim()])
+                      setNewTweetUrl("")
+                      setTweetUrlError(null)
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const id = extractTweetId(newTweetUrl)
+                    if (!id) {
+                      setTweetUrlError("Please enter a valid tweet URL (x.com or twitter.com)")
+                      return
+                    }
+                    if (tweetUrls.some((u) => extractTweetId(u) === id)) {
+                      setTweetUrlError("This tweet has already been added")
+                      return
+                    }
+                    setTweetUrls((prev) => [...prev, newTweetUrl.trim()])
+                    setNewTweetUrl("")
+                    setTweetUrlError(null)
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            )}
+
+            {tweetUrlError && (
+              <p className="text-xs text-destructive">{tweetUrlError}</p>
+            )}
+
+            {tweetUrls.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {tweetUrls.length}/{MAX_TWEETS_PER_PROBLEM} tweets added
+              </p>
+            )}
+          </div>
+
           <FormField
             control={form.control}
             name="category"
@@ -575,7 +1285,7 @@ export default function ProblemSubmitForm() {
                 <FormLabel className="text-base">
                   Category <span className="text-destructive">*</span>
                 </FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select value={field.value} onValueChange={(value) => field.onChange(value)}>
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a category" />
@@ -597,14 +1307,12 @@ export default function ProblemSubmitForm() {
             )}
           />
 
-          {/* Industry Tags */}
           <div className="space-y-3">
             <div className="flex items-baseline justify-between">
               <FormLabel className="text-base">Tags</FormLabel>
               <span className="text-xs text-muted-foreground">Up to 5</span>
             </div>
 
-            {/* Selected Tags */}
             {selectedTags.length > 0 && (
               <div className="flex flex-wrap gap-2" role="list" aria-label="Selected tags">
                 {selectedTags.map((tag) => (
@@ -622,7 +1330,6 @@ export default function ProblemSubmitForm() {
               </div>
             )}
 
-            {/* Suggested Tags */}
             {selectedTags.length < 5 && (
               <div className="flex flex-wrap gap-2" role="list" aria-label="Suggested tags">
                 {SUGGESTED_TAGS.filter((tag) => !selectedTags.includes(tag)).map((tag) => (
@@ -639,7 +1346,6 @@ export default function ProblemSubmitForm() {
               </div>
             )}
 
-            {/* Custom Tag Input */}
             {selectedTags.length < 5 && (
               <div className="flex gap-2">
                 <Input
@@ -660,10 +1366,8 @@ export default function ProblemSubmitForm() {
                 </Button>
               </div>
             )}
-
           </div>
 
-          {/* Privacy & Involvement */}
           <div className="border-border space-y-6 rounded-lg border p-6">
             <div className="space-y-4">
               <h3 className="font-semibold">Privacy Settings</h3>
@@ -674,11 +1378,55 @@ export default function ProblemSubmitForm() {
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-start gap-3 space-y-0">
                     <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={(checked) => {
+                          const isAnonymous = checked === true
+                          field.onChange(isAnonymous)
+                          if (isAnonymous) {
+                            form.setValue("creatorLaunchComment", "", { shouldDirty: true })
+                          }
+                        }}
+                      />
                     </FormControl>
                     <div className="space-y-1 leading-none">
                       <FormLabel className="font-normal">Post anonymously</FormLabel>
                     </div>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="creatorLaunchComment"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between gap-3">
+                      <FormLabel className="text-sm font-medium">
+                        Creator context comment {!form.watch("anonymous") && <span className="text-destructive">*</span>}
+                      </FormLabel>
+                      <span className="text-xs text-muted-foreground">
+                        {(field.value || "").length}/{COMMENT_MAX_LENGTH}
+                      </span>
+                    </div>
+                    <FormControl>
+                      <Textarea
+                        value={field.value || ""}
+                        onChange={field.onChange}
+                        placeholder={
+                          form.watch("anonymous")
+                            ? "Disabled for anonymous submissions"
+                            : "Share your context: why this matters, what you've learned, and where discussion should focus."
+                        }
+                        disabled={form.watch("anonymous")}
+                        rows={4}
+                        className="resize-none text-sm"
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      This will be posted as the first discussion comment when your problem is approved.
+                    </p>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -700,17 +1448,15 @@ export default function ProblemSubmitForm() {
                             checked={field.value === "want-build"}
                             onChange={(e) => {
                               field.onChange(e)
-                              form.setValue("alreadyBuildingSupport", [])
-                              form.setValue("wantToWorkInvolvement", undefined)
+                              form.setValue("alreadyBuildingSupport", [], { shouldDirty: true })
+                              form.setValue("wantToWorkInvolvement", [], { shouldDirty: true })
                               setAlreadyBuildingSupportOptions([])
                             }}
                             className="mt-1"
                           />
                           <div>
                             <div className="font-medium">I want to build this</div>
-                            <div className="text-muted-foreground text-sm">
-                              Looking for co-founders or resources
-                            </div>
+                            <div className="text-muted-foreground text-sm">Looking for co-founders or resources</div>
                           </div>
                         </label>
                         <label className="flex items-start gap-3 cursor-pointer">
@@ -720,8 +1466,8 @@ export default function ProblemSubmitForm() {
                             checked={field.value === "already-building"}
                             onChange={(e) => {
                               field.onChange(e)
-                              form.setValue("wantBuildBlocker", undefined)
-                              form.setValue("wantToWorkInvolvement", undefined)
+                              form.setValue("wantBuildBlocker", [], { shouldDirty: true })
+                              form.setValue("wantToWorkInvolvement", [], { shouldDirty: true })
                             }}
                             className="mt-1"
                           />
@@ -737,8 +1483,8 @@ export default function ProblemSubmitForm() {
                             checked={field.value === "want-to-work"}
                             onChange={(e) => {
                               field.onChange(e)
-                              form.setValue("wantBuildBlocker", undefined)
-                              form.setValue("alreadyBuildingSupport", [])
+                              form.setValue("wantBuildBlocker", [], { shouldDirty: true })
+                              form.setValue("alreadyBuildingSupport", [], { shouldDirty: true })
                               setAlreadyBuildingSupportOptions([])
                             }}
                             className="mt-1"
@@ -757,9 +1503,9 @@ export default function ProblemSubmitForm() {
                             checked={field.value === "just-sharing"}
                             onChange={(e) => {
                               field.onChange(e)
-                              form.setValue("wantBuildBlocker", undefined)
-                              form.setValue("alreadyBuildingSupport", [])
-                              form.setValue("wantToWorkInvolvement", undefined)
+                              form.setValue("wantBuildBlocker", [], { shouldDirty: true })
+                              form.setValue("alreadyBuildingSupport", [], { shouldDirty: true })
+                              form.setValue("wantToWorkInvolvement", [], { shouldDirty: true })
                               setAlreadyBuildingSupportOptions([])
                             }}
                             className="mt-1"
@@ -775,7 +1521,6 @@ export default function ProblemSubmitForm() {
                 )}
               />
 
-              {/* Follow-up: I want to build this */}
               {currentInvolvement === "want-build" && (
                 <FormField
                   control={form.control}
@@ -783,25 +1528,34 @@ export default function ProblemSubmitForm() {
                   render={({ field }) => (
                     <FormItem className="mt-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
                       <FormLabel className="text-sm font-medium">What's currently holding you back?</FormLabel>
+                      <p className="text-muted-foreground text-xs">Select all that apply</p>
                       <FormControl>
                         <div className="space-y-2 pl-6">
                           <label className="flex items-start gap-3 cursor-pointer">
-                            <input
-                              type="radio"
-                              value="need-capital"
-                              checked={field.value === "need-capital"}
-                              onChange={field.onChange}
-                              className="mt-0.5"
+                            <Checkbox
+                              checked={(field.value || []).includes("need-capital")}
+                              onCheckedChange={(checked) => {
+                                const current = field.value || []
+                                field.onChange(
+                                  checked
+                                    ? [...current, "need-capital"]
+                                    : current.filter((v: string) => v !== "need-capital")
+                                )
+                              }}
                             />
                             <div className="text-sm">I need capital/investment</div>
                           </label>
                           <label className="flex items-start gap-3 cursor-pointer">
-                            <input
-                              type="radio"
-                              value="need-cofounder"
-                              checked={field.value === "need-cofounder"}
-                              onChange={field.onChange}
-                              className="mt-0.5"
+                            <Checkbox
+                              checked={(field.value || []).includes("need-cofounder")}
+                              onCheckedChange={(checked) => {
+                                const current = field.value || []
+                                field.onChange(
+                                  checked
+                                    ? [...current, "need-cofounder"]
+                                    : current.filter((v: string) => v !== "need-cofounder")
+                                )
+                              }}
                             />
                             <div className="text-sm">I need to find a co-founder or team</div>
                           </label>
@@ -813,18 +1567,12 @@ export default function ProblemSubmitForm() {
                 />
               )}
 
-              {/* Follow-up: I'm already building this */}
               {currentInvolvement === "already-building" && (
                 <div className="mt-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
                   <FormLabel className="text-sm font-medium">How can the community best support you?</FormLabel>
                   <p className="text-muted-foreground text-xs">Select all that apply</p>
                   <div className="space-y-2 pl-6">
-                    {[
-                      { value: "need-awareness", label: "I need more awareness/visibility" },
-                      { value: "need-team", label: "I'm looking for founding team members" },
-                      { value: "need-cofounder", label: "I'm looking for a technical/business co-founder" },
-                      { value: "need-capital", label: "I need more capital/investment" },
-                    ].map((option) => (
+                    {ALREADY_BUILDING_SUPPORT_OPTIONS.map((option) => (
                       <label key={option.value} className="flex items-start gap-3 cursor-pointer">
                         <Checkbox
                           checked={alreadyBuildingSupportOptions.includes(option.value)}
@@ -833,7 +1581,7 @@ export default function ProblemSubmitForm() {
                               ? [...alreadyBuildingSupportOptions, option.value]
                               : alreadyBuildingSupportOptions.filter((v) => v !== option.value)
                             setAlreadyBuildingSupportOptions(newOptions)
-                            form.setValue("alreadyBuildingSupport", newOptions)
+                            form.setValue("alreadyBuildingSupport", newOptions, { shouldDirty: true })
                           }}
                         />
                         <div className="text-sm leading-none pt-0.5">{option.label}</div>
@@ -843,7 +1591,6 @@ export default function ProblemSubmitForm() {
                 </div>
               )}
 
-              {/* Follow-up: I would love to work on this project */}
               {currentInvolvement === "want-to-work" && (
                 <FormField
                   control={form.control}
@@ -853,25 +1600,34 @@ export default function ProblemSubmitForm() {
                       <FormLabel className="text-sm font-medium">
                         What kind of involvement are you open to?
                       </FormLabel>
+                      <p className="text-muted-foreground text-xs">Select all that apply</p>
                       <FormControl>
                         <div className="space-y-2 pl-6">
                           <label className="flex items-start gap-3 cursor-pointer">
-                            <input
-                              type="radio"
-                              value="volunteer"
-                              checked={field.value === "volunteer"}
-                              onChange={field.onChange}
-                              className="mt-0.5"
+                            <Checkbox
+                              checked={(field.value || []).includes("volunteer")}
+                              onCheckedChange={(checked) => {
+                                const current = field.value || []
+                                field.onChange(
+                                  checked
+                                    ? [...current, "volunteer"]
+                                    : current.filter((v: string) => v !== "volunteer")
+                                )
+                              }}
                             />
                             <div className="text-sm">Happy to volunteer my time</div>
                           </label>
                           <label className="flex items-start gap-3 cursor-pointer">
-                            <input
-                              type="radio"
-                              value="full-time"
-                              checked={field.value === "full-time"}
-                              onChange={field.onChange}
-                              className="mt-0.5"
+                            <Checkbox
+                              checked={(field.value || []).includes("full-time")}
+                              onCheckedChange={(checked) => {
+                                const current = field.value || []
+                                field.onChange(
+                                  checked
+                                    ? [...current, "full-time"]
+                                    : current.filter((v: string) => v !== "full-time")
+                                )
+                              }}
                             />
                             <div className="text-sm">Open to exploring full-time opportunities in this space</div>
                           </label>
@@ -885,7 +1641,12 @@ export default function ProblemSubmitForm() {
             </div>
           </div>
 
-          {/* Submit Buttons */}
+          {draftActionError && (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+              {draftActionError}
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
             <div className="flex gap-3">
               <Button
@@ -895,20 +1656,33 @@ export default function ProblemSubmitForm() {
                   "flex-1 sm:flex-none",
                   forkData && forkValidation && !forkValidation.isValid && "opacity-50",
                 )}
-                disabled={forkData && forkValidation ? !forkValidation.isValid : false}
+                disabled={(forkData && forkValidation ? !forkValidation.isValid : false) || isDraftActionLoading || authLoading}
               >
-                {forkData && forkValidation ? (
-                  forkValidation.isValid ? (
-                    "Submit Fork for Review"
-                  ) : (
-                    "Fork Too Similar - Make Changes"
-                  )
-                ) : (
-                  "Submit for Review"
-                )}
+                {isDraftActionLoading && draftLifecycleState === "submitting"
+                  ? "Submitting..."
+                  : forkData && forkValidation
+                    ? forkValidation.isValid
+                      ? "Submit Fork for Review"
+                      : "Fork Too Similar - Make Changes"
+                    : "Submit for Review"}
               </Button>
-              <Button type="button" variant="outline" size="lg">
-                Save Draft
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={() => void handleManualSave()}
+                disabled={isDraftActionLoading || authLoading}
+              >
+                {isDraftActionLoading && draftLifecycleState !== "submitting" ? "Saving..." : "Save Draft"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="lg"
+                onClick={() => setShowDiscardDialog(true)}
+                disabled={isDraftActionLoading}
+              >
+                Discard Draft
               </Button>
             </div>
             <Button type="button" variant="ghost" size="lg" asChild>
@@ -918,10 +1692,8 @@ export default function ProblemSubmitForm() {
         </form>
       </Form>
 
-      {/* Success Modal */}
       <SubmissionSuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} />
 
-      {/* Fork Validation Error Dialog */}
       <AlertDialog open={showForkValidationError} onOpenChange={setShowForkValidationError}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -947,7 +1719,7 @@ export default function ProblemSubmitForm() {
               )}
 
               <div className="space-y-2 bg-secondary/50 rounded-lg p-4">
-                <p className="font-semibold text-foreground text-sm">💡 Tips for a great fork:</p>
+                <p className="font-semibold text-foreground text-sm">Tips for a great fork:</p>
                 <ul className="list-disc pl-5 space-y-1 text-xs">
                   <li>What unique angle or focus are you bringing?</li>
                   <li>How is your approach different from the original?</li>
@@ -969,6 +1741,69 @@ export default function ProblemSubmitForm() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard this draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will archive the current server draft and clear your editor.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void (async () => {
+                  try {
+                    await discardCurrentDraft()
+                    setShowDiscardDialog(false)
+                  } catch (error) {
+                    setDraftActionError(error instanceof Error ? error.message : "Failed to discard draft")
+                    setShowDiscardDialog(false)
+                  }
+                })()
+              }}
+            >
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(archiveTargetDraft)} onOpenChange={(open) => !open && setArchiveTargetDraft(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive "{archiveTargetDraft?.title || "Untitled draft"}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes it from active drafts. You will not see it in your drafts list anymore.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isArchiveActionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!archiveTargetDraft || isArchiveActionLoading}
+              onClick={(e) => {
+                e.preventDefault()
+                if (!archiveTargetDraft) return
+                void (async () => {
+                  try {
+                    await archiveDraftById(archiveTargetDraft.id)
+                    setArchiveTargetDraft(null)
+                  } catch (error) {
+                    setDraftActionError(error instanceof Error ? error.message : "Failed to archive draft")
+                    setArchiveTargetDraft(null)
+                  }
+                })()
+              }}
+            >
+              {isArchiveActionLoading ? "Archiving..." : "Archive"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+    </>
   )
 }

@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import type { InvestmentTier, InvestmentFocus, EngagementLevel, BuildStatus, BuildStage, LookingFor, RaisingStage, Visibility, RoleInterest } from "@/types/engagement"
-import { Globe, ChevronDown, ChevronUp } from "lucide-react"
+import { Globe, ChevronDown, ChevronUp, CheckCircle2, Bell, Handshake, ShieldCheck } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import type { BuildFormData, InvestFormData, JoinTeamFormData } from "@/lib/pending-engagement"
 
@@ -29,25 +29,26 @@ interface InvestModalProps {
 
 export function InvestModal({ isOpen, onClose, onSubmit, isAuthenticated = true, onAuthRequired }: InvestModalProps) {
   // Core fields
-  const [focus, setFocus] = useState<InvestmentFocus>("seed")
+  const [focus, setFocus] = useState<InvestmentFocus>("angel")
   const [engagementLevel, setEngagementLevel] = useState<EngagementLevel>("evaluating")
   const [note, setNote] = useState("")
   const [visibility, setVisibility] = useState<Visibility>("public")
   const [linkedIn, setLinkedIn] = useState("")
+  const [submitted, setSubmitted] = useState(false)
 
   // Derive tier from focus for backwards compatibility
   const tierFromFocus = (f: InvestmentFocus): InvestmentTier => {
     switch (f) {
-      case "pre-seed": return "scout"
-      case "seed": return "angel"
-      case "series-a-plus": return "institutional"
+      case "small-checks": return "scout"
+      case "angel": return "angel"
+      case "vc": return "institutional"
     }
   }
 
   const focusOptions: { value: InvestmentFocus; label: string; description: string }[] = [
-    { value: "pre-seed", label: "Pre-seed / First checks", description: "$25K-$250K | Earliest stage, highest risk/reward" },
-    { value: "seed", label: "Seed stage", description: "$250K-$2M | Post-validation, scaling phase" },
-    { value: "series-a-plus", label: "Series A+", description: "$2M+ | Growth stage with traction" },
+    { value: "small-checks", label: "Small Checks", description: "$1K–$10K | Backing founders at the earliest stage" },
+    { value: "angel", label: "Angel", description: "$10K–$100K | Pre-seed and seed-stage investing" },
+    { value: "vc", label: "Venture Capital", description: "$100K+ | Institutional rounds and beyond" },
   ]
 
   const engagementOptions: { value: EngagementLevel; label: string; description: string }[] = [
@@ -74,200 +75,261 @@ export function InvestModal({ isOpen, onClose, onSubmit, isAuthenticated = true,
     }
 
     onSubmit(formData)
-    onClose()
-    resetForm()
+    setSubmitted(true)
   }
 
   const resetForm = () => {
-    setFocus("seed")
+    setFocus("angel")
     setEngagementLevel("evaluating")
     setNote("")
     setVisibility("public")
     setLinkedIn("")
   }
 
+  const handleClose = () => {
+    onClose()
+    setTimeout(() => {
+      resetForm()
+      setSubmitted(false)
+    }, 200)
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="pb-2">
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <span>📫</span> Get Connected to Builders
-          </DialogTitle>
-          <DialogDescription className="text-sm">
-            We'll introduce you to founders tackling this problem when they're ready. No commitment required.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5 py-2">
-          {/* Investment Focus */}
-          <div className="space-y-2.5">
-            <Label className="text-sm font-medium">What type of opportunities interest you?</Label>
-            <RadioGroup value={focus} onValueChange={(value) => setFocus(value as InvestmentFocus)}>
-              {focusOptions.map((option) => (
-                <div
-                  key={option.value}
-                  className="flex items-start space-x-3 space-y-0 rounded-lg border p-3 hover:bg-accent/5 transition-colors"
-                >
-                  <RadioGroupItem value={option.value} id={`focus-${option.value}`} className="mt-0.5" />
-                  <div className="flex-1">
-                    <Label htmlFor={`focus-${option.value}`} className="font-medium cursor-pointer text-sm">
-                      {option.label}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">{option.description}</p>
-                  </div>
+        {submitted ? (
+          /* ── Success State ── */
+          <>
+            <div className="py-8 text-center space-y-6">
+              {/* Success icon */}
+              <div className="flex justify-center">
+                <div className="bg-accent/10 rounded-full p-4">
+                  <CheckCircle2 className="h-10 w-10 text-accent" />
                 </div>
-              ))}
-            </RadioGroup>
-          </div>
-
-          {/* Engagement Level */}
-          <div className="space-y-2.5">
-            <Label className="text-sm font-medium">How involved would you like to be?</Label>
-            <RadioGroup value={engagementLevel} onValueChange={(value) => setEngagementLevel(value as EngagementLevel)}>
-              {engagementOptions.map((option) => (
-                <div
-                  key={option.value}
-                  className="flex items-start space-x-3 space-y-0 rounded-lg border p-3 hover:bg-accent/5 transition-colors"
-                >
-                  <RadioGroupItem value={option.value} id={`engagement-${option.value}`} className="mt-0.5" />
-                  <div className="flex-1">
-                    <Label htmlFor={`engagement-${option.value}`} className="font-medium cursor-pointer text-sm">
-                      {option.label}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">{option.description}</p>
-                  </div>
-                </div>
-              ))}
-            </RadioGroup>
-          </div>
-
-          {/* Optional Note */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="invest-note" className="text-sm font-medium">
-                Anything specific you're looking for? <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <span className="text-xs text-muted-foreground">{note.length}/280</span>
-            </div>
-            <Textarea
-              id="invest-note"
-              placeholder='e.g., "Especially interested in technical founders" or "Would love to see customer traction"'
-              value={note}
-              onChange={(e) => {
-                if (e.target.value.length <= 280) setNote(e.target.value)
-              }}
-              className="min-h-[60px] resize-none"
-            />
-          </div>
-
-          {/* Visibility - Radio style consistent with BuildModal */}
-          <div className="space-y-2.5">
-            <Label className="text-sm font-medium">How should you appear to builders?</Label>
-            <div className="grid gap-2">
-              {/* Public option */}
-              <button
-                type="button"
-                onClick={() => setVisibility("public")}
-                aria-pressed={visibility === "public"}
-                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-all ${
-                  visibility === "public"
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50"
-                }`}
-              >
-                <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                  visibility === "public" ? "border-primary bg-primary" : "border-muted-foreground"
-                }`}>
-                  {visibility === "public" && (
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 space-y-0.5">
-                  <div className="text-sm font-medium">Share my profile</div>
-                  <p className="text-xs text-muted-foreground">
-                    Your name and background are visible to builders on this problem
-                  </p>
-                </div>
-              </button>
-
-              {/* Anonymous option */}
-              <button
-                type="button"
-                onClick={() => setVisibility("private")}
-                aria-pressed={visibility === "private"}
-                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-all ${
-                  visibility === "private"
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50"
-                }`}
-              >
-                <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                  visibility === "private" ? "border-primary bg-primary" : "border-muted-foreground"
-                }`}>
-                  {visibility === "private" && (
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 space-y-0.5">
-                  <div className="text-sm font-medium">Stay anonymous for now</div>
-                  <p className="text-xs text-muted-foreground">
-                    Builders see "An investor is interested" until you reach out
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* LinkedIn - optional but recommended */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Help builders learn about you</Label>
-              <span className="text-xs text-muted-foreground">Recommended</span>
-            </div>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                </svg>
               </div>
-              <Input
-                placeholder="linkedin.com/in/yourname"
-                value={linkedIn}
-                onChange={(e) => setLinkedIn(e.target.value)}
-                className="pl-10 h-9"
-              />
+
+              <div className="space-y-2">
+                <h2 className="text-xl font-bold">Interest Registered</h2>
+                <p className="text-sm text-muted-foreground">
+                  You're on the list. Here's what happens from here.
+                </p>
+              </div>
+
+              {/* Coaching steps */}
+              <div className="space-y-4 text-left bg-secondary/50 rounded-lg p-5">
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <div className="bg-accent/10 rounded-full p-1.5">
+                      <Bell className="h-4 w-4 text-accent" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Builders get notified</p>
+                    <p className="text-xs text-muted-foreground">
+                      Founders working on this will see that an investor is interested
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <div className="bg-accent/10 rounded-full p-1.5">
+                      <Handshake className="h-4 w-4 text-accent" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">We'll make introductions</p>
+                    <p className="text-xs text-muted-foreground">
+                      When there's mutual fit, we'll connect you directly
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <div className="bg-accent/10 rounded-full p-1.5">
+                      <ShieldCheck className="h-4 w-4 text-accent" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">No commitment</p>
+                    <p className="text-xs text-muted-foreground">
+                      This is exploratory — you can withdraw anytime
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Having a profile helps builders take your interest seriously.
-            </p>
-          </div>
 
-          {/* What happens next - Reassurance footer */}
-          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
-            <p className="text-xs font-medium text-foreground">What happens next?</p>
-            <ul className="text-xs text-muted-foreground space-y-1">
-              <li className="flex items-start gap-2">
-                <span className="text-primary mt-0.5">•</span>
-                <span>Builders working on this get notified of your interest</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-primary mt-0.5">•</span>
-                <span>We'll connect you when there's mutual fit</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-primary mt-0.5">•</span>
-                <span>This is exploratory — no commitment on either side</span>
-              </li>
-            </ul>
-          </div>
-        </div>
+            <DialogFooter className="pt-0">
+              <Button onClick={handleClose} className="w-full" size="sm">Done</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          /* ── Form State ── */
+          <>
+            <DialogHeader className="pb-2">
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <span>📫</span> Get Connected to Builders
+              </DialogTitle>
+              <DialogDescription className="text-sm">
+                We'll introduce you to founders tackling this problem when they're ready. No commitment required.
+              </DialogDescription>
+            </DialogHeader>
 
-        <DialogFooter className="pt-2">
-          <Button variant="ghost" onClick={onClose} size="sm">
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} size="sm">Express Interest</Button>
-        </DialogFooter>
+            <div className="space-y-5 py-2">
+              {/* Investment Focus */}
+              <div className="space-y-2.5">
+                <Label className="text-sm font-medium">What type of opportunities interest you?</Label>
+                <RadioGroup value={focus} onValueChange={(value) => setFocus(value as InvestmentFocus)}>
+                  {focusOptions.map((option) => (
+                    <div
+                      key={option.value}
+                      className="flex items-start space-x-3 space-y-0 rounded-lg border p-3 hover:bg-accent/5 transition-colors"
+                    >
+                      <RadioGroupItem value={option.value} id={`focus-${option.value}`} className="mt-0.5" />
+                      <div className="flex-1">
+                        <Label htmlFor={`focus-${option.value}`} className="font-medium cursor-pointer text-sm">
+                          {option.label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">{option.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+
+              {/* Engagement Level */}
+              <div className="space-y-2.5">
+                <Label className="text-sm font-medium">How involved would you like to be?</Label>
+                <RadioGroup value={engagementLevel} onValueChange={(value) => setEngagementLevel(value as EngagementLevel)}>
+                  {engagementOptions.map((option) => (
+                    <div
+                      key={option.value}
+                      className="flex items-start space-x-3 space-y-0 rounded-lg border p-3 hover:bg-accent/5 transition-colors"
+                    >
+                      <RadioGroupItem value={option.value} id={`engagement-${option.value}`} className="mt-0.5" />
+                      <div className="flex-1">
+                        <Label htmlFor={`engagement-${option.value}`} className="font-medium cursor-pointer text-sm">
+                          {option.label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">{option.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+
+              {/* Optional Note */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="invest-note" className="text-sm font-medium">
+                    Anything specific you're looking for? <span className="text-muted-foreground font-normal">(optional)</span>
+                  </Label>
+                  <span className="text-xs text-muted-foreground">{note.length}/280</span>
+                </div>
+                <Textarea
+                  id="invest-note"
+                  placeholder='e.g., "Especially interested in technical founders" or "Would love to see customer traction"'
+                  value={note}
+                  onChange={(e) => {
+                    if (e.target.value.length <= 280) setNote(e.target.value)
+                  }}
+                  className="min-h-[60px] resize-none"
+                />
+              </div>
+
+              {/* Visibility - Radio style consistent with BuildModal */}
+              <div className="space-y-2.5">
+                <Label className="text-sm font-medium">How should you appear to builders?</Label>
+                <div className="grid gap-2">
+                  {/* Public option */}
+                  <button
+                    type="button"
+                    onClick={() => setVisibility("public")}
+                    aria-pressed={visibility === "public"}
+                    className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-all ${
+                      visibility === "public"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      visibility === "public" ? "border-primary bg-primary" : "border-muted-foreground"
+                    }`}>
+                      {visibility === "public" && (
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-0.5">
+                      <div className="text-sm font-medium">Share my profile</div>
+                      <p className="text-xs text-muted-foreground">
+                        Your name and background are visible to builders on this problem
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Anonymous option */}
+                  <button
+                    type="button"
+                    onClick={() => setVisibility("private")}
+                    aria-pressed={visibility === "private"}
+                    className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-all ${
+                      visibility === "private"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      visibility === "private" ? "border-primary bg-primary" : "border-muted-foreground"
+                    }`}>
+                      {visibility === "private" && (
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-0.5">
+                      <div className="text-sm font-medium">Stay anonymous for now</div>
+                      <p className="text-xs text-muted-foreground">
+                        Builders see "An investor is interested" until you reach out
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* LinkedIn - optional but recommended */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Help builders learn about you</Label>
+                  <span className="text-xs text-muted-foreground">Recommended</span>
+                </div>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                    </svg>
+                  </div>
+                  <Input
+                    placeholder="linkedin.com/in/yourname"
+                    value={linkedIn}
+                    onChange={(e) => setLinkedIn(e.target.value)}
+                    className="pl-10 h-9"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Having a profile helps builders take your interest seriously.
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button variant="ghost" onClick={handleClose} size="sm">
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit} size="sm">Express Interest</Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -331,9 +393,9 @@ export function BuildModal({ isOpen, onClose, onSubmit, isAuthenticated = true, 
   ]
 
   const raisingStageOptions: { value: RaisingStage; label: string }[] = [
-    { value: "pre-seed", label: "Pre-seed" },
-    { value: "seed", label: "Seed" },
-    { value: "series-a-plus", label: "Series A+" },
+    { value: "small-checks", label: "Small checks ($1K–$10K)" },
+    { value: "angel", label: "Angel ($10K–$100K)" },
+    { value: "vc", label: "VC ($100K+)" },
     { value: "not-sure", label: "Not sure yet" },
   ]
 

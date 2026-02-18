@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeft, ChevronUp } from "lucide-react"
+import { ArrowLeft, ChevronUp, Loader2, Compass, Plus, User as UserIcon, LogIn } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -28,34 +28,29 @@ import {
 import type { InvestmentTier, InvestmentFocus, EngagementLevel, BuildStatus, BuildStage, LookingFor, RaisingStage, Visibility, RoleInterest } from "@/types/engagement"
 import { allProblems } from "@/data/mock-problems"
 import ReactMarkdown from "react-markdown"
+import { RelatedProblems } from "@/components/related-problems"
+import { TweetEmbedsSection } from "@/components/tweet-embeds-section"
+import { getTimeAgo, getCategoryColor } from "@/lib/formatters"
+import type { BaseProblem, ProblemDetailApiResponse } from "@/types/problem"
+import type { AlreadyBuildingSupport } from "@/components/author-intent-tags"
+import { useSavedProblems } from "@/hooks/use-saved-problems"
 
-// Helper to get category color
-function getCategoryColor(category: string): string {
-  const colors: Record<string, string> = {
-    "Niche Markets": "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    "Climate Tech": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    "AI & Infrastructure": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    "Future of Work": "bg-green-500/10 text-green-400 border-green-500/20",
-    "Creator Economy": "bg-purple-500/10 text-purple-400 border-purple-500/20",
-    Longevity: "bg-pink-500/10 text-pink-400 border-pink-500/20",
-    "Rebuild Money": "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-    Moonshots: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    "World of Atoms": "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    Other: "bg-gray-500/10 text-gray-400 border-gray-500/20",
-  }
-  return colors[category] || "bg-gray-500/10 text-gray-400 border-gray-500/20"
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Helper to get time ago
-function getTimeAgo(date: Date): string {
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+const ALREADY_BUILDING_SUPPORT_VALUES: ReadonlyArray<AlreadyBuildingSupport> = [
+  "awareness",
+  "founding-team",
+  "cofounder",
+  "capital",
+]
 
-  if (seconds < 60) return "just now"
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
-  return `${Math.floor(seconds / 604800)}w ago`
+function normalizeAlreadyBuildingSupport(value: unknown): AlreadyBuildingSupport[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.filter(
+    (item): item is AlreadyBuildingSupport =>
+      typeof item === "string" &&
+      ALREADY_BUILDING_SUPPORT_VALUES.includes(item as AlreadyBuildingSupport),
+  )
 }
 
 // Fallback mock data for when problem is not found
@@ -77,7 +72,7 @@ const mockProblem = {
     "Most carbon tracking tools are built for enterprises with complex supply chains. Small businesses want to be sustainable but can't afford $10k/year software or hire a sustainability consultant.",
   // Author intent fields
   involvement: "already-building" as const,
-  alreadyBuildingSupport: ["cofounder", "capital"] as const,
+  alreadyBuildingSupport: ["cofounder", "capital"] as AlreadyBuildingSupport[],
   fullDescription: `## The Problem
 
 Small businesses (5-50 employees) want to track and reduce their carbon footprint, but existing solutions are:
@@ -96,70 +91,193 @@ Small businesses (5-50 employees) want to track and reduce their carbon footprin
 
 If 1% of US small businesses adopted a simple carbon tracking tool at $100/month, that's a $400M annual market while helping reduce millions of tons of CO2.`,
   engagement: {
-    building: 5,
-    buildingAnonymous: 2,
-    investors: 12,
-    followers: 34,
-    users: [
-      { name: "Alex Kumar", avatar: "/man.jpg", type: "building" as const },
-      { name: "Maria Garcia", avatar: "/diverse-woman-portrait.png", type: "investor" as const },
-      { name: "James Wilson", avatar: "/man.jpg", type: "building" as const },
-      { name: "Lisa Zhang", avatar: "/diverse-woman-portrait.png", type: "investor" as const },
-      { name: "David Brown", avatar: "/man.jpg", type: "investor" as const },
-    ],
+    building: 0,
+    buildingAnonymous: 0,
+    investors: 0,
+    followers: 0,
+    users: [],
   },
   // Institutional source data (not applicable for regular problems)
   isYCRFS: false,
   ycQuarter: undefined as string | undefined,
   isWeekendFundRFS: false,
   wfPublishedDate: undefined as string | undefined,
+  isConviction: false,
+  convictionPublishedDate: undefined as string | undefined,
+  isARK: false,
+  arkPublishedDate: undefined as string | undefined,
+  isPathlight: false,
+  pathlightPublishedDate: undefined as string | undefined,
+  isAccel: false,
+  accelPublishedDate: undefined as string | undefined,
+  tweetUrls: [] as string[],
 }
 
-export function ProblemDetailPage({ problemId }: { problemId?: string }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const { isAuthenticated } = useAuth()
-
-  // Find the problem from allProblems data
-  const problemData = allProblems.find((p) => String(p.id) === String(problemId))
-
-  // Transform problem data to match the expected format
-  const problem = problemData ? {
-    id: problemData.id,
-    title: problemData.title,
-    category: problemData.category,
-    categoryColor: getCategoryColor(problemData.category),
-    timeAgo: getTimeAgo(problemData.createdAt),
+// Helper to transform mock data to expected format
+function transformMockData(problemData: typeof allProblems[0]) {
+  // Cast to BaseProblem to access VC partner flags
+  const p = problemData as BaseProblem
+  return {
+    id: p.id,
+    title: p.title,
+    category: p.category,
+    categoryColor: getCategoryColor(p.category),
+    timeAgo: getTimeAgo(p.createdAt),
     author: {
-      name: problemData.author.username,
-      avatar: problemData.author.avatarUrl,
-      isAnonymous: problemData.isAnonymous,
-      isYC: (problemData.author as any).isYC,
-      isWeekendFund: (problemData.author as any).isWeekendFund,
+      name: p.author.username || p.author.name,
+      avatar: p.author.avatarUrl || p.author.avatar,
+      isAnonymous: p.isAnonymous,
+      isYC: p.author.isYC,
+      isWeekendFund: p.author.isWeekendFund,
+      isConviction: p.author.isConviction,
+      isARK: p.author.isARK,
+      isPathlight: p.author.isPathlight,
+      isAccel: p.author.isAccel,
     },
-    upvotes: problemData.upvotes,
-    elevatorPitch: problemData.elevatorPitch,
-    involvement: problemData.involvement,
-    alreadyBuildingSupport: (problemData as any).alreadyBuildingSupport,
-    wantBuildBlocker: (problemData as any).wantBuildBlocker,
-    wantToWorkInvolvement: (problemData as any).wantToWorkInvolvement,
-    fullDescription: problemData.fullDescription || `## The Problem\n\n${problemData.elevatorPitch}\n\n## Details\n\nThis is a real problem that needs solving.`,
+    upvotes: p.upvotes,
+    elevatorPitch: p.elevatorPitch,
+    involvement: p.involvement,
+    alreadyBuildingSupport: normalizeAlreadyBuildingSupport(p.alreadyBuildingSupport),
+    wantBuildBlocker: p.wantBuildBlocker,
+    wantToWorkInvolvement: p.wantToWorkInvolvement,
+    fullDescription: p.fullDescription || `## The Problem\n\n${p.elevatorPitch}\n\n## Details\n\nThis is a real problem that needs solving.`,
     engagement: {
-      building: problemData.builderCount || 0,
+      building: p.builderCount || 0,
       buildingAnonymous: 0,
-      investors: problemData.investorCount || 0,
+      investors: p.investorCount || 0,
       followers: 0,
       users: [],
     },
-    // Institutional source data
-    isYCRFS: (problemData as any).isYCRFS,
-    ycQuarter: (problemData as any).ycQuarter,
-    isWeekendFundRFS: (problemData as any).isWeekendFundRFS,
-    wfPublishedDate: (problemData as any).wfPublishedDate,
-  } : mockProblem
+    isYCRFS: p.isYCRFS,
+    ycQuarter: p.ycQuarter,
+    isWeekendFundRFS: p.isWeekendFundRFS,
+    wfPublishedDate: p.wfPublishedDate,
+    isConviction: p.isConviction,
+    convictionPublishedDate: p.convictionPublishedDate,
+    isARK: p.isARK,
+    arkPublishedDate: p.arkPublishedDate,
+    isPathlight: p.isPathlight,
+    pathlightPublishedDate: p.pathlightPublishedDate,
+    isAccel: p.isAccel,
+    accelPublishedDate: p.accelPublishedDate,
+    tweetUrls: p.tweetUrls || [],
+  }
+}
+
+// Helper to transform API data to expected format
+function transformApiData(apiData: ProblemDetailApiResponse) {
+  return {
+    id: apiData.id,
+    title: apiData.title,
+    category: apiData.category,
+    categoryColor: getCategoryColor(apiData.category),
+    timeAgo: getTimeAgo(new Date(apiData.createdAt)),
+    author: {
+      name: apiData.author?.name || 'Anonymous',
+      avatar: apiData.author?.avatarUrl || '',
+      isAnonymous: apiData.author?.isAnonymous || false,
+      isYC: apiData.author?.isYC || apiData.isYCRFS || false,
+      isWeekendFund: apiData.author?.isWeekendFund || apiData.isWeekendFundRFS || false,
+      isConviction: apiData.author?.isConviction || apiData.isConviction || false,
+      isARK: apiData.author?.isARK || apiData.isARK || false,
+      isPathlight: apiData.author?.isPathlight || apiData.isPathlight || false,
+      isAccel: apiData.author?.isAccel || apiData.isAccel || false,
+    },
+    upvotes: apiData.upvotes || 0,
+    elevatorPitch: apiData.elevatorPitch,
+    involvement: (apiData.involvement || 'just-sharing') as "already-building" | "just-sharing" | "want-build" | "want-to-work",
+    alreadyBuildingSupport: normalizeAlreadyBuildingSupport(apiData.alreadyBuildingSupport),
+    wantBuildBlocker: (Array.isArray(apiData.wantBuildBlocker) ? apiData.wantBuildBlocker : []) as Array<"need-capital" | "need-cofounder">,
+    wantToWorkInvolvement: (Array.isArray(apiData.wantToWorkInvolvement) ? apiData.wantToWorkInvolvement : []) as Array<"volunteer" | "full-time">,
+    fullDescription: apiData.fullDescription || `## The Problem\n\n${apiData.elevatorPitch}\n\n## Details\n\nThis is a real problem that needs solving.`,
+    engagement: {
+      building: apiData.builderCount || 0,
+      buildingAnonymous: 0,
+      investors: apiData.investorCount || 0,
+      followers: 0,
+      users: [],
+    },
+    isYCRFS: apiData.isYCRFS || false,
+    ycQuarter: apiData.ycQuarter,
+    isWeekendFundRFS: apiData.isWeekendFundRFS || false,
+    wfPublishedDate: apiData.wfPublishedDate,
+    isConviction: apiData.isConviction || false,
+    convictionPublishedDate: apiData.convictionPublishedDate,
+    isARK: apiData.isARK || false,
+    arkPublishedDate: apiData.arkPublishedDate,
+    isPathlight: apiData.isPathlight || false,
+    pathlightPublishedDate: apiData.pathlightPublishedDate,
+    isAccel: apiData.isAccel || false,
+    accelPublishedDate: apiData.accelPublishedDate,
+    tweetUrls: apiData.tweetUrls || [],
+  }
+}
+
+export function ProblemDetailPage({
+  problemId,
+  initialProblemData,
+}: {
+  problemId?: string
+  initialProblemData?: ProblemDetailApiResponse | null
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const { isAuthenticated, user } = useAuth()
+  const { toggleSave, isSaved } = useSavedProblems()
+
+  // Whether this problem ID is a real UUID (DB problem) vs mock data string
+  const isDbProblem = Boolean(problemId && UUID_RE.test(problemId))
+
+  // Problem state - starts with mock lookup, can be updated from API
+  const [problem, setProblem] = useState(() => {
+    if (initialProblemData) {
+      return transformApiData(initialProblemData)
+    }
+
+    // First try to find in mock data (for YC/Weekend Fund problems)
+    const problemData = allProblems.find((p) => String(p.id) === String(problemId))
+    if (problemData) {
+      return transformMockData(problemData)
+    }
+    return mockProblem
+  })
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Fetch from API if not found in mock data (for database problems with UUIDs)
+  useEffect(() => {
+    const fetchFromApi = async () => {
+      if (initialProblemData) return
+
+      // Skip if already found in mock data
+      const mockData = allProblems.find((p) => String(p.id) === String(problemId))
+      if (mockData || !problemId) return
+
+      setIsLoading(true)
+      try {
+        const res = await fetch(`/api/problems/${problemId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.problem) {
+            setProblem(transformApiData(data.problem))
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching problem:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchFromApi()
+  }, [problemId, initialProblemData])
 
   const [upvoted, setUpvoted] = useState(false)
   const [upvoteCount, setUpvoteCount] = useState(problem.upvotes)
+
+  // Update upvoteCount when problem changes
+  useEffect(() => {
+    setUpvoteCount(problem.upvotes)
+  }, [problem.upvotes])
 
   // Comments hook
   const { comments, addComment, editComment, deleteComment, upvoteComment } = useComments({
@@ -171,6 +289,8 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
   const [isBuilding, setIsBuilding] = useState(false)
   const [hasInvested, setHasInvested] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
+  const [engagementUsers, setEngagementUsers] = useState(problem.engagement.users)
+  const [engagementCounts, setEngagementCounts] = useState(problem.engagement)
 
   // Auth modal state
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
@@ -179,6 +299,51 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
   // Pending engagement state (for deferred auth flow)
   const [pendingEngagement, setPendingEngagement] = useState<PendingEngagement | null>(null)
   const [showPendingConfirmModal, setShowPendingConfirmModal] = useState(false)
+
+  const fetchUpvoteState = useCallback(async () => {
+    if (!problemId || !isDbProblem) return
+    try {
+      const response = await fetch(`/api/problems/${problemId}/upvote`, { cache: "no-store" })
+      if (!response.ok) return
+      const data = await response.json()
+      setUpvoted(Boolean(data.hasUpvoted))
+      setUpvoteCount(Number(data.upvoteCount || 0))
+    } catch (error) {
+      console.error("Failed to fetch upvote state:", error)
+    }
+  }, [problemId, isDbProblem])
+
+  const fetchEngagementState = useCallback(async () => {
+    if (!problemId || !isDbProblem) return
+    try {
+      const response = await fetch(`/api/problems/${problemId}/engagements?publicOnly=false`, { cache: "no-store" })
+      if (!response.ok) return
+      const data = await response.json()
+      setEngagementUsers(Array.isArray(data.engagedUsers) ? data.engagedUsers : [])
+      if (data.counts) {
+        setEngagementCounts({
+          building: Number(data.counts.building || 0),
+          buildingAnonymous: Number(data.counts.buildingAnonymous || 0),
+          investors: Number(data.counts.investors || 0),
+          followers: Number(data.counts.followers || 0),
+          users: Array.isArray(data.engagedUsers) ? data.engagedUsers : [],
+        })
+      }
+      if (data.myEngagements) {
+        setIsBuilding(Boolean(data.myEngagements.isBuilding))
+        setHasInvested(Boolean(data.myEngagements.hasInvested))
+        setHasApplied(Boolean(data.myEngagements.hasApplied))
+        setIsFollowing(Boolean(data.myEngagements.isFollowing))
+      }
+    } catch (error) {
+      console.error("Failed to fetch engagement state:", error)
+    }
+  }, [problemId, isDbProblem])
+
+  useEffect(() => {
+    fetchUpvoteState()
+    fetchEngagementState()
+  }, [fetchUpvoteState, fetchEngagementState, isAuthenticated])
 
   // Check for pending engagement when user becomes authenticated
   useEffect(() => {
@@ -207,14 +372,16 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
         break
       case 'upvote':
         if (!upvoted) {
-          setUpvoted(true)
-          setUpvoteCount(upvoteCount + 1)
+          handleUpvote()
         }
         break
       case 'follow':
         if (!isFollowing) {
-          setIsFollowing(true)
+          handleFollow()
         }
+        break
+      case 'fork':
+        handleFork()
         break
     }
 
@@ -240,29 +407,106 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
   }
 
   const handleUpvote = () => {
+    if (!isDbProblem) return
     requireAuth("upvote this problem", () => {
-      setUpvoted(!upvoted)
-      setUpvoteCount(upvoted ? upvoteCount - 1 : upvoteCount + 1)
+      void (async () => {
+        const response = await fetch(`/api/problems/${problem.id}/upvote`, { method: "POST" })
+        if (!response.ok) return
+        const data = await response.json()
+        setUpvoted(Boolean(data.hasUpvoted))
+        setUpvoteCount(Number(data.upvoteCount || 0))
+      })()
     })
   }
 
-  const handleInvest = (_data: { tier: InvestmentTier; focus: InvestmentFocus; engagementLevel: EngagementLevel; note: string; visibility: Visibility; linkedIn?: string }) => {
-    setHasInvested(true)
-    // TODO: Make API call to record investment interest with new fields
+  const handleSave = () => {
+    if (!isDbProblem) return
+    requireAuth("save this problem", () => {
+      void toggleSave(String(problem.id))
+    })
   }
 
-  const handleBuild = (_data: { status: BuildStatus; stage: BuildStage; visibility: Visibility; lookingFor: LookingFor[]; projectLink: string; description: string; whyYou: string; progressSoFar?: string; linkedIn?: string; twitter?: string; website?: string; raisingStage?: RaisingStage }) => {
-    setIsBuilding(true)
-    // TODO: Make API call to record builder interest with enhanced data
+  const handleInvest = (data: { tier: InvestmentTier; focus: InvestmentFocus; engagementLevel: EngagementLevel; note: string; visibility: Visibility; linkedIn?: string }) => {
+    if (!isDbProblem) return
+    void (async () => {
+      const response = await fetch(`/api/problems/${problem.id}/engagements`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "invest",
+          visibility: data.visibility,
+          payload: data,
+        }),
+      })
+
+      if (!response.ok) return
+      await fetchEngagementState()
+    })()
   }
 
-  const handleJoinTeam = (_data: { roleInterest: RoleInterest; skills: string[]; intro: string; linkedIn?: string; twitter?: string; portfolio?: string }) => {
-    setHasApplied(true)
-    // TODO: Make API call to record team application with profile links
+  const handleBuild = (data: { status: BuildStatus; stage: BuildStage; visibility: Visibility; lookingFor: LookingFor[]; projectLink: string; description: string; whyYou: string; progressSoFar?: string; linkedIn?: string; twitter?: string; website?: string; raisingStage?: RaisingStage }) => {
+    if (!isDbProblem) return
+    void (async () => {
+      const response = await fetch(`/api/problems/${problem.id}/engagements`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "build",
+          visibility: data.visibility,
+          payload: data,
+        }),
+      })
+
+      if (!response.ok) return
+      await fetchEngagementState()
+    })()
+  }
+
+  const handleJoinTeam = (data: { roleInterest: RoleInterest; skills: string[]; intro: string; linkedIn?: string; twitter?: string; portfolio?: string }) => {
+    if (!isDbProblem) return
+    void (async () => {
+      const response = await fetch(`/api/problems/${problem.id}/engagements`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "join_team",
+          visibility: "private",
+          payload: data,
+        }),
+      })
+
+      if (!response.ok) return
+      await fetchEngagementState()
+    })()
   }
 
   const handleFollow = () => {
-    setIsFollowing(!isFollowing)
+    if (!isDbProblem) return
+    void (async () => {
+      if (isFollowing) {
+        const response = await fetch(`/api/problems/${problem.id}/engagements?publicOnly=false`, { cache: "no-store" })
+        if (!response.ok) return
+        const data = await response.json()
+        const followEngagement = (data.engagements || []).find(
+          (item: { id: string; type: string; userId: string }) => item.type === "follow" && item.userId === user?.id
+        )
+        if (followEngagement?.id) {
+          await fetch(`/api/problems/${problem.id}/engagements/${followEngagement.id}`, { method: "DELETE" })
+        }
+      } else {
+        await fetch(`/api/problems/${problem.id}/engagements`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "follow",
+            visibility: "public",
+            payload: {},
+          }),
+        })
+      }
+
+      await fetchEngagementState()
+    })()
   }
 
   const handleFork = () => {
@@ -279,19 +523,71 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
     router.push(`/submit?fork=${problem.id}`)
   }
 
+  const detailHeader = (
+    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container max-w-5xl mx-auto flex items-center gap-3 px-4 sm:px-6 h-14">
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+            <Compass className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <span className="text-lg font-semibold text-foreground hidden sm:inline">OpenQuest</span>
+        </Link>
+
+        {/* Back to feed */}
+        <Link href="/feed">
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Back to feed</span>
+          </Button>
+        </Link>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Submit Problem */}
+        <Button asChild size="sm" className="bg-foreground text-background hover:bg-foreground/90 gap-1.5">
+          <Link href="/submit">
+            <Plus className="h-4 w-4 hidden sm:inline" />
+            <span className="hidden sm:inline">Submit Problem</span>
+            <span className="sm:hidden">Submit</span>
+          </Link>
+        </Button>
+
+        {/* User menu */}
+        {isAuthenticated ? (
+          <Button variant="ghost" size="icon" className="rounded-full" asChild>
+            <Link href="/profile">
+              <UserIcon className="h-5 w-5" />
+            </Link>
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/login" className="gap-1.5">
+              <LogIn className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign In</span>
+            </Link>
+          </Button>
+        )}
+      </div>
+    </header>
+  )
+
+  // Show loading state while fetching from API
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        {detailHeader}
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container max-w-5xl mx-auto px-4 py-4">
-          <Link href="/feed">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to feed
-            </Button>
-          </Link>
-        </div>
-      </header>
+      {detailHeader}
 
       {/* Main Content */}
       <main className="container max-w-5xl mx-auto px-4 py-8">
@@ -316,7 +612,7 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
           </div>
 
           {/* Content */}
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0 overflow-hidden">
             {/* Mobile upvote */}
             <div className="md:hidden">
               <motion.button
@@ -361,6 +657,30 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
                   <InstitutionalAuthor
                     type="weekend-fund"
                     year={problem.wfPublishedDate}
+                    size="md"
+                  />
+                ) : problem.isConviction ? (
+                  <InstitutionalAuthor
+                    type="conviction"
+                    year={problem.convictionPublishedDate}
+                    size="md"
+                  />
+                ) : problem.isARK ? (
+                  <InstitutionalAuthor
+                    type="ark"
+                    year={problem.arkPublishedDate}
+                    size="md"
+                  />
+                ) : problem.isPathlight ? (
+                  <InstitutionalAuthor
+                    type="pathlight"
+                    year={problem.pathlightPublishedDate}
+                    size="md"
+                  />
+                ) : problem.isAccel ? (
+                  <InstitutionalAuthor
+                    type="accel"
+                    year={problem.accelPublishedDate}
                     size="md"
                   />
                 ) : (
@@ -463,18 +783,20 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
               hasApplied={hasApplied}
               engagementCounts={{
                 upvotes: upvoteCount,
-                investors: problem.engagement.investors,
-                building: problem.engagement.building,
-                buildingAnonymous: problem.engagement.buildingAnonymous,
-                followers: problem.engagement.followers,
+                investors: engagementCounts.investors,
+                building: engagementCounts.building,
+                buildingAnonymous: engagementCounts.buildingAnonymous,
+                followers: engagementCounts.followers,
               }}
-              engagedUsers={problem.engagement.users}
+              engagedUsers={engagementUsers}
               onUpvote={handleUpvote}
               onInvest={handleInvest}
               onBuild={handleBuild}
               onJoinTeam={handleJoinTeam}
               onFollow={handleFollow}
               onFork={handleFork}
+              isSaved={isSaved(String(problem.id))}
+              onSave={handleSave}
               isAuthor={false}
             />
 
@@ -486,7 +808,19 @@ export function ProblemDetailPage({ problemId }: { problemId?: string }) {
               onEditComment={editComment}
               onDeleteComment={deleteComment}
               onUpvoteComment={upvoteComment}
+              currentUserId={user?.id}
               returnUrl={pathname}
+            />
+
+            {/* Tweet Embeds */}
+            {problem.tweetUrls && problem.tweetUrls.length > 0 && (
+              <TweetEmbedsSection tweetUrls={problem.tweetUrls} />
+            )}
+
+            {/* Related Problems Carousel */}
+            <RelatedProblems
+              currentProblemId={String(problem.id)}
+              category={problem.category}
             />
           </div>
         </div>

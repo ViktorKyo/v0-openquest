@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, hasPermission, logAdminAction } from '@/lib/admin-auth';
 import { db } from '@/lib/db/supabase';
-import { problems, problemModeration, users } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { comments, problems, problemModeration, users } from '@/lib/db/schema';
+import { eq, sql } from 'drizzle-orm';
 import { sendModerationEmail } from '@/lib/email/send';
+import { validateTweetUrls } from '@/lib/tweet-utils';
 
 export async function POST(
   req: NextRequest,
@@ -24,7 +25,8 @@ export async function POST(
       );
     }
 
-    const { action, notes } = await req.json();
+    const { action, notes, tweetUrls: rawTweetUrls } = await req.json();
+    const validatedTweetUrls = rawTweetUrls ? validateTweetUrls(rawTweetUrls) : undefined;
 
     if (!['approve', 'reject'].includes(action)) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -61,24 +63,71 @@ export async function POST(
       author = authorResult;
     }
 
-    // Update problem status
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
-    await db
-      .update(problems)
-      .set({
-        status: newStatus,
-        moderatedAt: new Date(),
-      })
-      .where(eq(problems.id, problemId));
+    const shouldRequireLaunchComment = action === 'approve' && Boolean(problem.creatorLaunchCommentRequired);
+    const launchCommentDraft = (problem.creatorLaunchCommentDraft || '').trim();
 
-    // Create moderation record
-    await db.insert(problemModeration).values({
-      problemId,
-      reviewedBy: session.adminDbId,
-      status: action === 'approve' ? 'approved' : 'rejected',
-      adminNotes: notes || null,
-      rejectionReason: action === 'reject' ? notes || null : null,
-      reviewedAt: new Date(),
+    if (shouldRequireLaunchComment && !problem.authorId) {
+      return NextResponse.json(
+        { error: 'Cannot approve: non-anonymous submission is missing author' },
+        { status: 400 }
+      );
+    }
+
+    if (shouldRequireLaunchComment && !launchCommentDraft) {
+      return NextResponse.json(
+        { error: 'Cannot approve: creator context comment is required before launch' },
+        { status: 400 }
+      );
+    }
+
+    await db.transaction(async (tx) => {
+      let launchCommentId: string | null = null;
+      const now = new Date();
+
+      if (shouldRequireLaunchComment && problem.authorId) {
+        const [insertedLaunchComment] = await tx
+          .insert(comments)
+          .values({
+            problemId,
+            authorId: problem.authorId,
+            parentId: null,
+            content: launchCommentDraft,
+            isLaunchComment: true,
+          })
+          .returning({ id: comments.id });
+
+        launchCommentId = insertedLaunchComment.id;
+      }
+
+      await tx
+        .update(problems)
+        .set({
+          status: newStatus,
+          moderatedAt: now,
+          creatorLaunchCommentId: launchCommentId,
+          creatorLaunchCommentPostedAt: launchCommentId ? now : null,
+          creatorLaunchCommentDraft: launchCommentId ? null : problem.creatorLaunchCommentDraft,
+          commentCount: launchCommentId
+            ? sql`(
+              SELECT COUNT(*)
+              FROM comments c
+              WHERE c.problem_id = ${problemId}
+                AND c.is_deleted = FALSE
+            )`
+            : problem.commentCount,
+          ...(validatedTweetUrls !== undefined && { tweetUrls: validatedTweetUrls }),
+        })
+        .where(eq(problems.id, problemId));
+
+      await tx.insert(problemModeration).values({
+        problemId,
+        reviewedBy: session.adminDbId,
+        status: action === 'approve' ? 'approved' : 'rejected',
+        adminNotes: notes || null,
+        rejectionReason: action === 'reject' ? notes || null : null,
+        reviewedAt: now,
+      });
     });
 
     // Log the action

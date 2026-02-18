@@ -3,7 +3,7 @@ import { ProblemCard } from "@/components/reusable-problem-card"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, ExternalLink } from "lucide-react"
 import { ycRfsProblems, transformYCProblem, ycAuthor } from "@/data/yc-rfs-problems"
-import { YCBadge, YCQuarterTag } from "@/components/yc-badge"
+import { VCBadge, VCDateTag } from "@/components/vc-badge"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -23,7 +23,7 @@ export default function YCRFSPage() {
   const summer2025Problems = ycRfsProblems.filter((p) => p.quarter === "Summer 2025")
 
   return (
-    <div className="min-h-screen">
+    <div>
       {/* Hero Section */}
       <div className="border-b bg-gradient-to-b from-orange-50/50 via-background to-background dark:from-orange-950/10">
         <div className="container mx-auto max-w-6xl px-4 py-16 sm:py-24">
@@ -49,7 +49,7 @@ export default function YCRFSPage() {
                   Requests for Startups
                 </h1>
               </div>
-              <YCBadge className="mb-4" />
+              <VCBadge vc="yc" className="mb-4" />
             </div>
           </div>
 
@@ -112,7 +112,7 @@ export default function YCRFSPage() {
             <h2 className="text-3xl font-bold mb-2">Fall 2025</h2>
             <p className="text-muted-foreground">Latest problems from YC's Fall 2025 batch</p>
           </div>
-          <YCQuarterTag quarter="Fall 2025" />
+          <VCDateTag vc="yc" date="Fall 2025" />
         </div>
 
         <div className="space-y-6 mb-16">
@@ -128,7 +128,7 @@ export default function YCRFSPage() {
             <h2 className="text-3xl font-bold mb-2">Summer 2025</h2>
             <p className="text-muted-foreground">Problems from YC's Summer 2025 batch</p>
           </div>
-          <YCQuarterTag quarter="Summer 2025" />
+          <VCDateTag vc="yc" date="Summer 2025" />
         </div>
 
         <div className="space-y-6">

@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import { getProblemsByCategory } from "@/data/mock-problems"
+import { db } from "@/lib/db/supabase"
+import { problems, users } from "@/lib/db/schema"
+import { and, eq, ilike, inArray } from "drizzle-orm"
+import { PUBLIC_PROBLEM_STATUSES } from "@/lib/problem-access"
 
 // Generate static params for all categories
 export async function generateStaticParams() {
@@ -28,9 +32,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: category.seo.title,
     description: category.seo.description,
+    alternates: {
+      canonical: `/category/${category.slug}`,
+    },
     openGraph: {
       title: category.seo.title,
       description: category.seo.description,
+      url: `/category/${category.slug}`,
       type: "website",
     },
     twitter: {
@@ -49,8 +57,82 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     notFound()
   }
 
-  // Get problems for this category (includes both regular and YC problems)
-  const categoryProblems = getProblemsByCategory(slug)
+  // Featured editorial/sourced content (shown first while community grows)
+  const editorialProblems = getProblemsByCategory(slug)
+
+  // Community submissions from DB
+  let communityProblems: Array<{
+    id: string
+    title: string
+    elevatorPitch: string
+    category: string
+    upvotes: number
+    commentCount: number
+    builderCount: number
+    investorCount: number
+    author: { username: string; avatarUrl: string }
+    isAnonymous: boolean
+    createdAt: Date | string
+    involvement?: "want-build" | "already-building" | "just-sharing" | "want-to-work"
+    wantBuildBlocker?: ReadonlyArray<"need-capital" | "need-cofounder">
+    wantToWorkInvolvement?: ReadonlyArray<"volunteer" | "full-time">
+    alreadyBuildingSupport?: ReadonlyArray<"awareness" | "founding-team" | "cofounder" | "capital">
+  }> = []
+
+  try {
+    const rows = await db
+      .select({
+        id: problems.id,
+        title: problems.title,
+        elevatorPitch: problems.elevatorPitch,
+        category: problems.category,
+        upvotes: problems.upvotes,
+        commentCount: problems.commentCount,
+        builderCount: problems.builderCount,
+        investorCount: problems.investorCount,
+        isAnonymous: problems.isAnonymous,
+        createdAt: problems.createdAt,
+        involvement: problems.involvement,
+        wantBuildBlocker: problems.wantBuildBlocker,
+        wantToWorkInvolvement: problems.wantToWorkInvolvement,
+        alreadyBuildingSupport: problems.alreadyBuildingSupport,
+        authorName: users.name,
+        authorAvatarUrl: users.avatarUrl,
+      })
+      .from(problems)
+      .leftJoin(users, eq(problems.authorId, users.id))
+      .where(
+        and(
+          inArray(problems.status, [...PUBLIC_PROBLEM_STATUSES]),
+          ilike(problems.category, category.name),
+        ),
+      )
+
+    communityProblems = rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      elevatorPitch: row.elevatorPitch,
+      category: row.category,
+      upvotes: row.upvotes || 0,
+      commentCount: row.commentCount || 0,
+      builderCount: row.builderCount || 0,
+      investorCount: row.investorCount || 0,
+      author: {
+        username: row.isAnonymous ? "Anonymous" : (row.authorName || "Anonymous"),
+        avatarUrl: row.isAnonymous ? "" : (row.authorAvatarUrl || ""),
+      },
+      isAnonymous: Boolean(row.isAnonymous),
+      createdAt: row.createdAt,
+      involvement: (row.involvement || undefined) as "want-build" | "already-building" | "just-sharing" | "want-to-work" | undefined,
+      wantBuildBlocker: ((row.wantBuildBlocker as string[] | null) || undefined) as ReadonlyArray<"need-capital" | "need-cofounder"> | undefined,
+      wantToWorkInvolvement: ((row.wantToWorkInvolvement as string[] | null) || undefined) as ReadonlyArray<"volunteer" | "full-time"> | undefined,
+      alreadyBuildingSupport: ((row.alreadyBuildingSupport as string[] | null) || undefined) as ReadonlyArray<"awareness" | "founding-team" | "cofounder" | "capital"> | undefined,
+    }))
+  } catch {
+    // Keep page functional during local/dev DB outages.
+  }
+
+  const totalProblems = editorialProblems.length + communityProblems.length
 
   // Get other categories for "Explore More" section
   const otherCategories = getAllCategorySlugs()
@@ -103,17 +185,33 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
       <div className="container mx-auto max-w-5xl px-4 py-12" id="problems">
         <div className="mb-8 flex items-center justify-between">
           <h2 className="text-2xl font-bold">Problems in {category.name}</h2>
-          <div className="text-sm text-muted-foreground">{categoryProblems.length} problems</div>
+          <div className="text-sm text-muted-foreground">{totalProblems} problems</div>
         </div>
 
-        <div className="space-y-6">
-          {categoryProblems.map((problem) => (
-            <ProblemCard key={problem.id} problem={problem} variant="detailed" />
-          ))}
-        </div>
+        {editorialProblems.length > 0 && (
+          <div className="mb-10">
+            <h3 className="mb-4 text-lg font-semibold">Featured sourced problems</h3>
+            <div className="space-y-6">
+              {editorialProblems.map((problem) => (
+                <ProblemCard key={`editorial-${problem.id}`} problem={problem} variant="detailed" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {communityProblems.length > 0 && (
+          <div className="mb-6">
+            <h3 className="mb-4 text-lg font-semibold">Community submissions</h3>
+            <div className="space-y-6">
+              {communityProblems.map((problem) => (
+                <ProblemCard key={`community-${problem.id}`} problem={problem} variant="detailed" />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Empty state - shown when no problems */}
-        {categoryProblems.length === 0 && (
+        {totalProblems === 0 && (
           <div className="py-16 text-center">
             <p className="text-lg text-muted-foreground mb-6">No problems submitted in this category yet.</p>
             <Button asChild>

@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import { NavSectionLink } from "@/components/nav-section-link"
 
 const CATEGORIES = [
   { name: "All Categories", color: "bg-gray-500" },
@@ -94,6 +95,21 @@ export function NavigationHeader({ variant = "default", isLoggedIn = false }: Na
               <Link href="/feed" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                 Browse
               </Link>
+              <NavSectionLink
+                href="/accelerators"
+                label="Accelerators"
+                tooltip="Accelerators show structured programs that help early teams validate faster, ship with support, and improve fundraising readiness."
+              />
+              <NavSectionLink
+                href="/landscape"
+                label="VCs"
+                tooltip="VCs show what top investors are actively backing, so you can align startup ideas with current capital demand."
+              />
+              <NavSectionLink
+                href="/fellowships"
+                label="Fellowships"
+                tooltip="Fellowships show non-dilutive funding and community-backed paths for builders to develop high-conviction ideas."
+              />
               <Link
                 href="#how-it-works"
                 className="text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -198,6 +214,27 @@ export function NavigationHeader({ variant = "default", isLoggedIn = false }: Na
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Browse Problems
+                  </Link>
+                  <Link
+                    href="/landscape"
+                    className="text-base font-medium text-foreground hover:text-primary transition-colors py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    VCs
+                  </Link>
+                  <Link
+                    href="/fellowships"
+                    className="text-base font-medium text-foreground hover:text-primary transition-colors py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Fellowships
+                  </Link>
+                  <Link
+                    href="/accelerators"
+                    className="text-base font-medium text-foreground hover:text-primary transition-colors py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Accelerators
                   </Link>
                   <Link
                     href="#how-it-works"

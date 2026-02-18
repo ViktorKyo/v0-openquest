@@ -1,6 +1,14 @@
+import type { Metadata } from "next"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Cookie } from "lucide-react"
+import Link from "next/link"
+
+export const metadata: Metadata = {
+  title: "Cookie Policy",
+  description: "Learn how OpenQuest uses cookies and similar technologies. Manage your cookie preferences.",
+  alternates: { canonical: "/cookies" },
+}
 
 export default function CookiesPage() {
   return (
@@ -15,7 +23,7 @@ export default function CookiesPage() {
               <Cookie className="w-8 h-8 text-accent" />
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">Cookie Policy</h1>
-            <p className="text-muted-foreground">Last updated: {new Date().toLocaleDateString()}</p>
+            <p className="text-muted-foreground">Last updated: February 12, 2026</p>
           </div>
 
           {/* Content */}
@@ -125,22 +133,18 @@ export default function CookiesPage() {
               <h2 className="text-2xl font-bold mb-4">Updates to This Policy</h2>
               <p className="text-muted-foreground mb-4">
                 We may update this Cookie Policy from time to time. We will notify you of any changes by posting the
-                new policy on this page with an updated "Last updated" date.
+                new policy on this page with an updated &quot;Last updated&quot; date.
               </p>
             </section>
 
             <section className="mb-8">
               <h2 className="text-2xl font-bold mb-4">Contact Us</h2>
               <p className="text-muted-foreground mb-4">
-                If you have questions about our use of cookies, please contact us at:
-              </p>
-              <p className="text-muted-foreground">
-                <a
-                  href="mailto:privacy@openquest.com"
-                  className="text-accent hover:text-accent/80 transition-colors"
-                >
-                  privacy@openquest.com
-                </a>
+                If you have questions about our use of cookies, please reach out through our{" "}
+                <Link href="/help" className="text-accent hover:text-accent/80 transition-colors">
+                  Help Center
+                </Link>
+                .
               </p>
             </section>
           </div>

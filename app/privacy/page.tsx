@@ -1,6 +1,14 @@
+import type { Metadata } from "next"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { Shield } from "lucide-react"
+import Link from "next/link"
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description: "Learn how OpenQuest collects, uses, and protects your personal information. Read our privacy policy.",
+  alternates: { canonical: "/privacy" },
+}
 
 export default function PrivacyPage() {
   return (
@@ -15,7 +23,7 @@ export default function PrivacyPage() {
               <Shield className="w-8 h-8 text-accent" />
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">Privacy Policy</h1>
-            <p className="text-muted-foreground">Last updated: {new Date().toLocaleDateString()}</p>
+            <p className="text-muted-foreground">Last updated: February 12, 2026</p>
           </div>
 
           {/* Content */}
@@ -39,9 +47,9 @@ export default function PrivacyPage() {
                 We may collect personal information that you voluntarily provide to us when you:
               </p>
               <ul className="list-disc pl-6 text-muted-foreground space-y-2 mb-4">
-                <li>Register for an account</li>
-                <li>Submit problems or comments</li>
-                <li>Participate in discussions</li>
+                <li>Register for an account (username, email address, profile information)</li>
+                <li>Submit problems or comments (content you create on the platform)</li>
+                <li>Participate in discussions (upvotes, saved problems)</li>
                 <li>Contact us for support</li>
               </ul>
 
@@ -66,8 +74,7 @@ export default function PrivacyPage() {
                 <li>Improve, personalize, and expand our services</li>
                 <li>Understand and analyze how you use our platform</li>
                 <li>Develop new features and functionality</li>
-                <li>Communicate with you for customer service and updates</li>
-                <li>Send you marketing and promotional communications (with your consent)</li>
+                <li>Send service-related notices (e.g., account verification, security alerts)</li>
                 <li>Detect and prevent fraud and abuse</li>
               </ul>
             </section>
@@ -84,7 +91,7 @@ export default function PrivacyPage() {
                 </li>
                 <li>
                   <strong>Service Providers:</strong> We may share your information with third-party service providers
-                  that perform services for us (hosting, analytics, customer service)
+                  that perform services for us (hosting, analytics)
                 </li>
                 <li>
                   <strong>Legal Requirements:</strong> We may disclose your information if required by law or in
@@ -123,8 +130,11 @@ export default function PrivacyPage() {
               <h2 className="text-2xl font-bold mb-4">7. Cookies and Tracking</h2>
               <p className="text-muted-foreground mb-4">
                 We use cookies and similar tracking technologies to track activity on our platform and hold certain
-                information. You can instruct your browser to refuse all cookies or to indicate when a cookie is being
-                sent.
+                information. For more details, please see our{" "}
+                <Link href="/cookies" className="text-accent hover:text-accent/80 transition-colors">
+                  Cookie Policy
+                </Link>
+                . You can instruct your browser to refuse all cookies or to indicate when a cookie is being sent.
               </p>
             </section>
 
@@ -138,7 +148,7 @@ export default function PrivacyPage() {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-bold mb-4">9. Children's Privacy</h2>
+              <h2 className="text-2xl font-bold mb-4">9. Children&apos;s Privacy</h2>
               <p className="text-muted-foreground mb-4">
                 Our service is not intended for children under the age of 13. We do not knowingly collect personal
                 information from children under 13. If you are a parent or guardian and believe your child has provided
@@ -147,22 +157,54 @@ export default function PrivacyPage() {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-bold mb-4">10. Changes to This Policy</h2>
+              <h2 className="text-2xl font-bold mb-4">10. California Privacy Rights</h2>
               <p className="text-muted-foreground mb-4">
-                We may update our Privacy Policy from time to time. We will notify you of any changes by posting the
-                new Privacy Policy on this page and updating the "Last updated" date.
+                If you are a California resident, you have specific rights under the California Consumer Privacy Act
+                (CCPA):
+              </p>
+              <ul className="list-disc pl-6 text-muted-foreground space-y-2 mb-4">
+                <li>
+                  <strong>Right to Know:</strong> You can request information about the categories and specific pieces
+                  of personal information we have collected about you
+                </li>
+                <li>
+                  <strong>Right to Delete:</strong> You can request that we delete any personal information we have
+                  collected from you
+                </li>
+                <li>
+                  <strong>Right to Opt-Out:</strong> You have the right to opt out of the sale of your personal
+                  information. OpenQuest does not sell your personal information
+                </li>
+                <li>
+                  <strong>Non-Discrimination:</strong> We will not discriminate against you for exercising any of your
+                  CCPA rights
+                </li>
+              </ul>
+              <p className="text-muted-foreground mb-4">
+                To exercise any of these rights, please contact us through our{" "}
+                <Link href="/help" className="text-accent hover:text-accent/80 transition-colors">
+                  Help Center
+                </Link>
+                .
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-2xl font-bold mb-4">11. Contact Us</h2>
+              <h2 className="text-2xl font-bold mb-4">11. Changes to This Policy</h2>
               <p className="text-muted-foreground mb-4">
-                If you have questions or concerns about this Privacy Policy, please contact us at:
+                We may update our Privacy Policy from time to time. We will notify you of any changes by posting the
+                new Privacy Policy on this page and updating the &quot;Last updated&quot; date.
               </p>
-              <p className="text-muted-foreground">
-                <a href="mailto:privacy@openquest.com" className="text-accent hover:text-accent/80 transition-colors">
-                  privacy@openquest.com
-                </a>
+            </section>
+
+            <section className="mb-8">
+              <h2 className="text-2xl font-bold mb-4">12. Contact Us</h2>
+              <p className="text-muted-foreground mb-4">
+                If you have questions or concerns about this Privacy Policy, please reach out through our{" "}
+                <Link href="/help" className="text-accent hover:text-accent/80 transition-colors">
+                  Help Center
+                </Link>
+                .
               </p>
             </section>
           </div>

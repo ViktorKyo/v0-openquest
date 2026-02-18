@@ -22,6 +22,7 @@ export interface Comment {
   createdAt: Date
   updatedAt?: Date
   isDeleted: boolean
+  isLaunchComment?: boolean
 
   // For the current user
   hasUpvoted?: boolean
@@ -36,6 +37,32 @@ export interface Comment {
 export interface CommentFormData {
   content: string
   parentId?: string // If replying to a comment
+}
+
+// Comment validation constants
+export const COMMENT_MIN_LENGTH = 1
+export const COMMENT_MAX_LENGTH = 5000
+
+/**
+ * Validates comment content and returns an error message or null if valid.
+ * Used by both client-side and server-side validation.
+ */
+export function validateCommentContent(content: unknown): string | null {
+  if (!content || typeof content !== 'string') {
+    return 'Comment content is required'
+  }
+
+  const trimmed = content.trim()
+
+  if (trimmed.length < COMMENT_MIN_LENGTH) {
+    return 'Comment cannot be empty'
+  }
+
+  if (trimmed.length > COMMENT_MAX_LENGTH) {
+    return `Comment must be ${COMMENT_MAX_LENGTH} characters or less`
+  }
+
+  return null // valid
 }
 
 // 2-hour edit window
@@ -58,16 +85,8 @@ export function canDeleteComment(comment: Comment, currentUserId?: string): bool
   return !comment.replies || comment.replies.length === 0
 }
 
-export function getTimeAgo(date: Date): string {
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - new Date(date).getTime()) / 1000)
-
-  if (seconds < 60) return "just now"
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
-  return `${Math.floor(seconds / 604800)}w ago`
-}
+// Re-export getTimeAgo from shared formatters for backward compatibility
+export { getTimeAgo } from "@/lib/formatters"
 
 export function getEditTimeRemaining(createdAt: Date): string | null {
   const elapsed = Date.now() - new Date(createdAt).getTime()

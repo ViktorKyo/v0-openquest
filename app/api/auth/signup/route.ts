@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   createUser,
   getUserByEmail,
-  setUserSession,
   validateEmail,
   validatePassword,
 } from '@/lib/user-auth';
-import { signupLimiter } from '@/lib/rate-limit';
+import { checkSignupRateLimit } from '@/lib/rate-limit';
+
+const SIGNUP_NEUTRAL_MESSAGE = 'If this email can be used for OpenQuest, your account is ready. Please sign in.';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 
     try {
-      await signupLimiter.check(3, ip); // 3 signups per hour per IP
+      await checkSignupRateLimit(ip);
     } catch {
       return NextResponse.json(
         { error: 'Too many signup attempts. Please try again later.' },
@@ -61,30 +62,25 @@ export async function POST(req: NextRequest) {
     const existingUser = await getUserByEmail(email);
     if (existingUser) {
       return NextResponse.json(
-        { error: 'An account with this email already exists' },
-        { status: 409 }
+        {
+          success: true,
+          message: SIGNUP_NEUTRAL_MESSAGE,
+        },
+        { status: 200 }
       );
     }
 
     // Create user
-    const user = await createUser({
+    await createUser({
       email,
       password,
       name: name.trim(),
     });
 
-    // Set session cookie
-    await setUserSession(user.id, false);
-
     return NextResponse.json({
       success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatarUrl: user.avatarUrl,
-      },
-    }, { status: 201 });
+      message: SIGNUP_NEUTRAL_MESSAGE,
+    }, { status: 200 });
   } catch (error) {
     console.error('Signup error:', error);
     return NextResponse.json(

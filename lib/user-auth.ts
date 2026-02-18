@@ -1,15 +1,10 @@
-import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { db } from './db/supabase';
-import { users } from './db/schema';
-import { eq } from 'drizzle-orm';
-
-const secret = new TextEncoder().encode(
-  process.env.USER_SESSION_SECRET || 'user-secret-key-change-in-production'
-);
+import { userProfiles, users, userSessions } from './db/schema';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 
 const COOKIE_NAME = 'user_session';
 const BCRYPT_ROUNDS = 12;
@@ -19,6 +14,11 @@ export interface UserSession {
   email: string;
   name: string | null;
   avatarUrl: string | null;
+}
+
+interface SessionMetadata {
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 export interface User {
@@ -32,6 +32,29 @@ export interface User {
   suspensionReason: string | null;
   banReason: string | null;
   suspendedUntil: Date | null;
+}
+
+export type UserStatus = 'active' | 'suspended' | 'banned';
+
+export interface UserProfile {
+  userId: string;
+  headline: string | null;
+  bio: string | null;
+  location: string | null;
+  timezone: string | null;
+  linkedinUrl: string | null;
+  twitterUrl: string | null;
+  websiteUrl: string | null;
+  profileVisibilityDefault: 'public' | 'private';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserWithProfile extends User {
+  status: UserStatus;
+  profileCompletionScore: number;
+  hasCompletedOnboarding: boolean;
+  profile: UserProfile | null;
 }
 
 // ============================================
@@ -57,51 +80,75 @@ export function generateResetToken(): string {
 // ============================================
 export async function createUserSession(
   userId: string,
-  rememberMe: boolean = false
+  rememberMe: boolean = false,
+  metadata?: SessionMetadata
 ): Promise<string> {
-  const token = await new SignJWT({ userId })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(rememberMe ? '30d' : '24h')
-    .sign(secret);
+  const token = crypto.randomBytes(48).toString('base64url');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const now = new Date();
+  const expiresAt = new Date(
+    now.getTime() + (rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000)
+  );
+
+  await db.insert(userSessions).values({
+    userId,
+    sessionTokenHash: tokenHash,
+    rememberMe,
+    ipAddress: metadata?.ipAddress || null,
+    userAgent: metadata?.userAgent || null,
+    expiresAt,
+    lastSeenAt: now,
+  });
 
   return token;
 }
 
 export async function verifyUserSession(token: string): Promise<UserSession | null> {
   try {
-    const verified = await jwtVerify(token, secret);
-    const userId = verified.payload.userId as string;
-
-    // Fetch user from database
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const [result] = await db
+      .select({
+        userId: users.id,
+        email: users.email,
+        name: users.name,
+        avatarUrl: users.avatarUrl,
+        isBanned: users.isBanned,
+        isSuspended: users.isSuspended,
+        suspendedUntil: users.suspendedUntil,
+      })
+      .from(userSessions)
+      .innerJoin(users, eq(userSessions.userId, users.id))
+      .where(
+        and(
+          eq(userSessions.sessionTokenHash, tokenHash),
+          isNull(userSessions.revokedAt),
+          gt(userSessions.expiresAt, new Date())
+        )
+      )
       .limit(1);
 
-    if (!user) {
+    if (!result) {
       return null;
     }
 
     // Check if user is banned
-    if (user.isBanned) {
+    if (result.isBanned) {
       return null;
     }
 
     // Check if user is suspended and suspension hasn't expired
-    if (user.isSuspended && user.suspendedUntil) {
-      if (new Date() < new Date(user.suspendedUntil)) {
+    if (result.isSuspended && result.suspendedUntil) {
+      if (new Date() < new Date(result.suspendedUntil)) {
         return null;
       }
       // Suspension expired, could auto-unsuspend here
     }
 
     return {
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.avatarUrl,
+      userId: result.userId,
+      email: result.email,
+      name: result.name,
+      avatarUrl: result.avatarUrl,
     };
   } catch (error) {
     return null;
@@ -125,8 +172,12 @@ export async function getUserSession(req?: NextRequest): Promise<UserSession | n
   }
 }
 
-export async function setUserSession(userId: string, rememberMe: boolean = false) {
-  const token = await createUserSession(userId, rememberMe);
+export async function setUserSession(
+  userId: string,
+  rememberMe: boolean = false,
+  metadata?: SessionMetadata
+) {
+  const token = await createUserSession(userId, rememberMe, metadata);
   const cookieStore = await cookies();
 
   cookieStore.set(COOKIE_NAME, token, {
@@ -140,6 +191,21 @@ export async function setUserSession(userId: string, rememberMe: boolean = false
 
 export async function clearUserSession() {
   const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+
+  if (token) {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    await db
+      .update(userSessions)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(userSessions.sessionTokenHash, tokenHash),
+          isNull(userSessions.revokedAt)
+        )
+      );
+  }
+
   cookieStore.delete(COOKIE_NAME);
 }
 
@@ -164,6 +230,128 @@ export async function getUserById(id: string): Promise<User | null> {
     .limit(1);
 
   return user || null;
+}
+
+export async function ensureUserProfile(userId: string): Promise<UserProfile> {
+  const [existing] = await db
+    .select()
+    .from(userProfiles)
+    .where(eq(userProfiles.userId, userId))
+    .limit(1);
+
+  if (existing) {
+    return {
+      ...existing,
+      profileVisibilityDefault: existing.profileVisibilityDefault as 'public' | 'private',
+    };
+  }
+
+  const [created] = await db
+    .insert(userProfiles)
+    .values({
+      userId,
+      profileVisibilityDefault: 'public',
+    })
+    .returning();
+
+  return {
+    ...created,
+    profileVisibilityDefault: created.profileVisibilityDefault as 'public' | 'private',
+  };
+}
+
+export function normalizeOptionalUrl(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error('Invalid URL value');
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(withProtocol);
+  } catch {
+    throw new Error('Invalid URL format');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('URL must start with http:// or https://');
+  }
+
+  return parsed.toString();
+}
+
+export function getUserStatus(user: User): UserStatus {
+  if (user.isBanned) {
+    return 'banned';
+  }
+
+  if (user.isSuspended && user.suspendedUntil && new Date() < new Date(user.suspendedUntil)) {
+    return 'suspended';
+  }
+
+  return 'active';
+}
+
+export function calculateProfileCompletionScore(input: {
+  name: string | null;
+  profile: Partial<UserProfile> | null;
+}): number {
+  const profile = input.profile;
+  const fields = [
+    !!(input.name && input.name.trim()),
+    !!(profile?.headline && profile.headline.trim()),
+    !!(profile?.bio && profile.bio.trim()),
+    !!(profile?.location && profile.location.trim()),
+    !!(profile?.timezone && profile.timezone.trim()),
+    !!(profile?.linkedinUrl && profile.linkedinUrl.trim()),
+    !!(profile?.twitterUrl && profile.twitterUrl.trim()),
+    !!(profile?.websiteUrl && profile.websiteUrl.trim()),
+  ];
+
+  const completeCount = fields.filter(Boolean).length;
+  return Math.round((completeCount / fields.length) * 100);
+}
+
+export function hasCompletedOnboarding(input: {
+  name: string | null;
+  profile: Partial<UserProfile> | null;
+}): boolean {
+  return Boolean(
+    input.name &&
+      input.name.trim() &&
+      input.profile?.headline &&
+      input.profile.headline.trim() &&
+      input.profile?.bio &&
+      input.profile.bio.trim()
+  );
+}
+
+export async function getUserWithProfileById(userId: string): Promise<UserWithProfile | null> {
+  const user = await getUserById(userId);
+  if (!user) {
+    return null;
+  }
+
+  const profile = await ensureUserProfile(userId);
+  const completion = calculateProfileCompletionScore({ name: user.name, profile });
+  const status = getUserStatus(user);
+
+  return {
+    ...user,
+    status,
+    profileCompletionScore: completion,
+    hasCompletedOnboarding: hasCompletedOnboarding({ name: user.name, profile }),
+    profile,
+  };
 }
 
 export async function createUser(params: {
@@ -241,13 +429,62 @@ export async function verifyPasswordResetToken(token: string): Promise<User | nu
 
 export async function updateUserProfile(
   userId: string,
-  data: { name?: string; avatarUrl?: string }
+  data: {
+    name?: string;
+    avatarUrl?: string | null;
+    headline?: string | null;
+    bio?: string | null;
+    location?: string | null;
+    timezone?: string | null;
+    linkedinUrl?: string | null;
+    twitterUrl?: string | null;
+    websiteUrl?: string | null;
+    profileVisibilityDefault?: 'public' | 'private';
+  }
 ): Promise<User | null> {
-  const [user] = await db
-    .update(users)
-    .set(data)
-    .where(eq(users.id, userId))
-    .returning();
+  const userUpdate: {
+    name?: string;
+    avatarUrl?: string | null;
+  } = {};
+  const profileUpdate: {
+    headline?: string | null;
+    bio?: string | null;
+    location?: string | null;
+    timezone?: string | null;
+    linkedinUrl?: string | null;
+    twitterUrl?: string | null;
+    websiteUrl?: string | null;
+    profileVisibilityDefault?: 'public' | 'private';
+    updatedAt?: Date;
+  } = {};
+
+  if (data.name !== undefined) userUpdate.name = data.name;
+  if (data.avatarUrl !== undefined) userUpdate.avatarUrl = data.avatarUrl;
+  if (data.headline !== undefined) profileUpdate.headline = data.headline;
+  if (data.bio !== undefined) profileUpdate.bio = data.bio;
+  if (data.location !== undefined) profileUpdate.location = data.location;
+  if (data.timezone !== undefined) profileUpdate.timezone = data.timezone;
+  if (data.linkedinUrl !== undefined) profileUpdate.linkedinUrl = data.linkedinUrl;
+  if (data.twitterUrl !== undefined) profileUpdate.twitterUrl = data.twitterUrl;
+  if (data.websiteUrl !== undefined) profileUpdate.websiteUrl = data.websiteUrl;
+  if (data.profileVisibilityDefault !== undefined) {
+    profileUpdate.profileVisibilityDefault = data.profileVisibilityDefault;
+  }
+
+  if (Object.keys(profileUpdate).length > 0) {
+    await ensureUserProfile(userId);
+    profileUpdate.updatedAt = new Date();
+    await db
+      .update(userProfiles)
+      .set(profileUpdate)
+      .where(eq(userProfiles.userId, userId));
+  }
+
+  if (Object.keys(userUpdate).length === 0) {
+    return getUserById(userId);
+  }
+
+  const [user] = await db.update(users).set(userUpdate).where(eq(users.id, userId)).returning();
 
   return user || null;
 }
@@ -271,14 +508,16 @@ export function validatePassword(password: string): { valid: boolean; error?: st
 // USER STATUS CHECKS
 // ============================================
 export function checkUserStatus(user: User): { allowed: boolean; error?: string } {
-  if (user.isBanned) {
+  const status = getUserStatus(user);
+
+  if (status === 'banned') {
     return {
       allowed: false,
       error: user.banReason || 'Your account has been banned'
     };
   }
 
-  if (user.isSuspended) {
+  if (status === 'suspended') {
     if (user.suspendedUntil && new Date() < new Date(user.suspendedUntil)) {
       const until = new Date(user.suspendedUntil).toLocaleDateString();
       return {

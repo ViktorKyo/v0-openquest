@@ -35,6 +35,7 @@ interface Problem {
   authorId: string
   authorName: string | null
   authorEmail: string | null
+  tweetUrls?: string[]
 }
 
 interface PaginationInfo {
@@ -103,12 +104,13 @@ export default function AdminProblemsPage() {
   const handleModerate = async (
     problemId: string,
     action: "approve" | "reject",
-    notes?: string
+    notes?: string,
+    tweetUrls?: string[]
   ) => {
     const res = await fetch(`/api/admin/problems/${problemId}/moderate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, notes }),
+      body: JSON.stringify({ action, notes, tweetUrls }),
     })
 
     if (!res.ok) throw new Error("Moderation failed")

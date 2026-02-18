@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Environment (secrets)
+.env
+.env.local
+.env.*.local
+
+# Version control
+.git/
+.gitignore
+
+# Testing
+__tests__/
+coverage/
+*.lcov
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+.claude/
+docs/
+*.md
+!README.md
+
+# Docker (prevent recursive copies)
+Dockerfile
+docker-compose*.yml
+
+# Debug logs
+npm-debug.log*
+pnpm-debug.log*
+
+# Misc
+.vercel
+*.pem
+*.key

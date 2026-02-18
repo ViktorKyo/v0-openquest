@@ -1,8 +1,20 @@
+import type { Metadata } from "next"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { HelpCircle, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
+
+export const metadata: Metadata = {
+  title: "Help Center",
+  description: "Get help with OpenQuest. Find answers to frequently asked questions about submitting problems, engaging with the community, and using the platform.",
+  alternates: { canonical: "/help" },
+  openGraph: {
+    title: "Help Center",
+    description: "Get help with OpenQuest. Find answers to frequently asked questions.",
+    url: "/help",
+  },
+}
 
 export default function HelpPage() {
   const faqs = [
@@ -80,8 +92,28 @@ export default function HelpPage() {
     },
   ]
 
+  // Build FAQ JSON-LD from the data
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.flatMap((section) =>
+      section.questions.map((item) => ({
+        "@type": "Question",
+        name: item.q,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.a,
+        },
+      }))
+    ),
+  }
+
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <Header />
 
       <main className="pt-24 pb-20">

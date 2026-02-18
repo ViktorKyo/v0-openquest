@@ -41,7 +41,7 @@ export function ProblemRejectedEmail({
           </Text>
 
           <Section style={problemSection}>
-            <Text style={problemTitle}>{problemTitle}</Text>
+            <Text style={problemTitleText}>{problemTitle}</Text>
           </Section>
 
           <Section style={reasonSection}>
@@ -123,7 +123,7 @@ const problemSection = {
   borderLeft: '4px solid #ef4444',
 };
 
-const problemTitle = {
+const problemTitleText = {
   color: '#1a1a1a',
   fontSize: '18px',
   fontWeight: '600',

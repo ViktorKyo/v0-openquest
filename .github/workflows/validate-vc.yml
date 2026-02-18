@@ -1,0 +1,32 @@
+name: Validate VC Data
+
+on:
+  pull_request:
+    paths:
+      - 'data/vc-theses/**'
+      - 'data/*-problems.ts'
+      - 'components/*-badge.tsx'
+      - 'components/vc-badge.tsx'
+      - 'lib/vc-registry.ts'
+      - 'lib/funding-themes.ts'
+
+jobs:
+  validate:
+    name: Validate VC Data Consistency
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run VC validation
+        run: npm run validate:vc

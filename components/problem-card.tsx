@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
-import { ChevronUp, MessageCircle } from "lucide-react"
+import { ChevronUp, MessageCircle, Bookmark } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { AuthorIntentTags } from "@/components/author-intent-tags"
@@ -18,21 +18,30 @@ interface Problem {
   comments: number
   author: {
     name: string
-    avatar: string
+    avatar: string | null
     isYC?: boolean
     isWeekendFund?: boolean
+    isConviction?: boolean
+    isARK?: boolean
+    isPathlight?: boolean
   }
   timeAgo: string
   categoryColor: string
   // Author intent fields
   involvement?: "want-build" | "already-building" | "just-sharing" | "want-to-work"
-  wantBuildBlocker?: "need-capital" | "need-cofounder"
-  wantToWorkInvolvement?: "volunteer" | "full-time"
+  wantBuildBlocker?: Array<"need-capital" | "need-cofounder">
+  wantToWorkInvolvement?: Array<"volunteer" | "full-time">
   alreadyBuildingSupport?: Array<"awareness" | "founding-team" | "cofounder" | "capital">
   isAnonymous?: boolean
 }
 
-export function ProblemCard({ problem }: { problem: Problem }) {
+interface ProblemCardProps {
+  problem: Problem
+  isSaved?: boolean
+  onToggleSave?: () => void
+}
+
+export function ProblemCard({ problem, isSaved = false, onToggleSave }: ProblemCardProps) {
   const [upvoted, setUpvoted] = useState(false)
   const [upvoteCount, setUpvoteCount] = useState(problem.upvotes)
   const router = useRouter()
@@ -57,6 +66,12 @@ export function ProblemCard({ problem }: { problem: Problem }) {
 
   const handleCardClick = () => {
     router.push(`/problem/${problem.id}`)
+  }
+
+  const handleSaveClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onToggleSave?.()
   }
 
   return (
@@ -122,6 +137,21 @@ export function ProblemCard({ problem }: { problem: Problem }) {
                     <InstitutionalLogo type="weekend-fund" className="size-6" />
                     <span className="font-medium">Weekend Fund</span>
                   </span>
+                ) : problem.author.isConviction ? (
+                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <InstitutionalLogo type="conviction" className="size-6" />
+                    <span className="font-medium">Conviction</span>
+                  </span>
+                ) : problem.author.isARK ? (
+                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <InstitutionalLogo type="ark" className="size-6" />
+                    <span className="font-medium">ARK Invest</span>
+                  </span>
+                ) : problem.author.isPathlight ? (
+                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <InstitutionalLogo type="pathlight" className="size-6" />
+                    <span className="font-medium">Pathlight</span>
+                  </span>
                 ) : (
                   <>
                     <img
@@ -135,9 +165,27 @@ export function ProblemCard({ problem }: { problem: Problem }) {
                 <span className="text-muted-foreground/50">·</span>
                 <span className="text-sm text-muted-foreground">{problem.timeAgo}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <MessageCircle className="h-4 w-4" />
-                <span className="text-sm">{problem.comments}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <MessageCircle className="h-4 w-4" />
+                  <span className="text-sm">{problem.comments}</span>
+                </div>
+                {/* Bookmark button */}
+                {onToggleSave && (
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={handleSaveClick}
+                    className={cn(
+                      "p-1 rounded-md transition-colors",
+                      isSaved
+                        ? "text-orange-500 hover:text-orange-600"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    )}
+                    title={isSaved ? "Remove from saved" : "Save for later"}
+                  >
+                    <Bookmark className={cn("h-4 w-4", isSaved && "fill-current")} />
+                  </motion.button>
+                )}
               </div>
             </div>
           </div>

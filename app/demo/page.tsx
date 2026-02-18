@@ -31,7 +31,7 @@ const mockProblems = [
     isAnonymous: true,
     createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000), // 5 hours ago
     involvement: "want-build" as const,
-    wantBuildBlocker: "need-capital" as const,
+    wantBuildBlocker: ["need-capital"] as const,
   },
   {
     id: "3",
@@ -47,7 +47,7 @@ const mockProblems = [
     isAnonymous: false,
     createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000), // 8 hours ago
     involvement: "want-to-work" as const,
-    wantToWorkInvolvement: "volunteer" as const,
+    wantToWorkInvolvement: ["volunteer"] as const,
   },
 ]
 

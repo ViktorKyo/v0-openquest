@@ -4,6 +4,8 @@ import { db } from '@/lib/db/supabase';
 import { comments, users, commentUpvotes, problems } from '@/lib/db/schema';
 import { eq, and, isNull, desc, sql } from 'drizzle-orm';
 import type { Comment, CommentAuthor } from '@/types/comment';
+import { validateCommentContent } from '@/types/comment';
+import { canAccessProblem, isPublicProblemStatus } from '@/lib/problem-access';
 
 const EDIT_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -19,14 +21,19 @@ export async function GET(
 
     // Fetch problem author to mark their comments
     const [problem] = await db
-      .select({ authorId: problems.authorId })
+      .select({ authorId: problems.authorId, status: problems.status })
       .from(problems)
       .where(eq(problems.id, problemId))
       .limit(1);
 
+    if (!problem || !canAccessProblem({ status: problem.status, authorId: problem.authorId, userId: currentUserId })) {
+      return NextResponse.json({ error: 'Problem not found' }, { status: 404 });
+    }
+
     const problemAuthorId = problem?.authorId;
 
     // Fetch top-level comments with author info
+    // Launch comments sorted first, then newest first
     const topLevelComments = await db
       .select({
         id: comments.id,
@@ -36,6 +43,7 @@ export async function GET(
         createdAt: comments.createdAt,
         updatedAt: comments.updatedAt,
         isDeleted: comments.isDeleted,
+        isLaunchComment: comments.isLaunchComment,
         parentId: comments.parentId,
         authorId: comments.authorId,
         authorName: users.name,
@@ -50,7 +58,7 @@ export async function GET(
           eq(comments.isHidden, false)
         )
       )
-      .orderBy(desc(comments.createdAt));
+      .orderBy(desc(comments.isLaunchComment), desc(comments.createdAt));
 
     // Fetch all replies
     const replies = await db
@@ -62,6 +70,7 @@ export async function GET(
         createdAt: comments.createdAt,
         updatedAt: comments.updatedAt,
         isDeleted: comments.isDeleted,
+        isLaunchComment: comments.isLaunchComment,
         parentId: comments.parentId,
         authorId: comments.authorId,
         authorName: users.name,
@@ -84,7 +93,8 @@ export async function GET(
       const upvotes = await db
         .select({ commentId: commentUpvotes.commentId })
         .from(commentUpvotes)
-        .where(eq(commentUpvotes.userId, currentUserId));
+        .innerJoin(comments, eq(commentUpvotes.commentId, comments.id))
+        .where(and(eq(commentUpvotes.userId, currentUserId), eq(comments.problemId, problemId)));
       userUpvotes = new Set(upvotes.map(u => u.commentId));
     }
 
@@ -120,6 +130,7 @@ export async function GET(
         createdAt: createdAt,
         updatedAt: row.updatedAt ? new Date(row.updatedAt) : undefined,
         isDeleted: row.isDeleted || false,
+        isLaunchComment: row.isLaunchComment || false,
         hasUpvoted: userUpvotes.has(row.id),
         canEdit,
         canDelete: currentUserId === row.authorId,
@@ -168,14 +179,12 @@ export async function POST(
     const body = await req.json();
     const { content, parentId } = body;
 
-    if (!content || typeof content !== 'string') {
-      return NextResponse.json({ error: 'Content is required' }, { status: 400 });
+    const validationError = validateCommentContent(content);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const trimmedContent = content.trim();
-    if (trimmedContent.length < 1 || trimmedContent.length > 2000) {
-      return NextResponse.json({ error: 'Content must be between 1 and 2000 characters' }, { status: 400 });
-    }
+    const trimmedContent = (content as string).trim();
 
     // If replying, verify parent exists and belongs to same problem
     if (parentId) {
@@ -192,10 +201,14 @@ export async function POST(
 
     // Check if user is the problem author
     const [problem] = await db
-      .select({ authorId: problems.authorId })
+      .select({ authorId: problems.authorId, status: problems.status })
       .from(problems)
       .where(eq(problems.id, problemId))
       .limit(1);
+
+    if (!problem || !isPublicProblemStatus(problem.status)) {
+      return NextResponse.json({ error: 'Problem not found' }, { status: 404 });
+    }
 
     const isProblemAuthor = problem?.authorId === session.userId;
 
@@ -210,8 +223,18 @@ export async function POST(
       })
       .returning();
 
-    // Increment problem comment count
-    // TODO: Add this when problems table has comment_count
+    // Keep denormalized problem comment_count in sync with actual non-deleted comments.
+    await db
+      .update(problems)
+      .set({
+        commentCount: sql`(
+          SELECT COUNT(*)
+          FROM comments c
+          WHERE c.problem_id = ${problemId}
+            AND c.is_deleted = FALSE
+        )`,
+      })
+      .where(eq(problems.id, problemId));
 
     return NextResponse.json({
       comment: {

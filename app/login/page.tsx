@@ -11,6 +11,13 @@ import { Sparkles, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
 
+function sanitizeReturnUrl(url: string | null): string {
+  if (!url) return "/feed"
+  // Only allow relative paths starting with /
+  if (!url.startsWith("/") || url.startsWith("//")) return "/feed"
+  return url
+}
+
 function LoginForm() {
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState("")
@@ -19,12 +26,13 @@ function LoginForm() {
   const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [notice, setNotice] = useState("")
 
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login, signup, isAuthenticated } = useAuth()
 
-  const returnUrl = searchParams.get("returnUrl") || "/feed"
+  const returnUrl = sanitizeReturnUrl(searchParams.get("returnUrl"))
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -36,11 +44,13 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setNotice("")
     setIsLoading(true)
 
     try {
       if (isLogin) {
         await login(email, password, rememberMe)
+        router.push(returnUrl)
       } else {
         if (!name.trim()) {
           setError("Please enter your name")
@@ -48,8 +58,12 @@ function LoginForm() {
           return
         }
         await signup(email, password, name)
+        setIsLogin(true)
+        setPassword("")
+        setName("")
+        setNotice("If this email can be used for OpenQuest, your account is ready. Please sign in.")
+        setIsLoading(false)
       }
-      router.push(returnUrl)
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message)
@@ -100,6 +114,7 @@ function LoginForm() {
               onClick={() => {
                 setIsLogin(true)
                 setError("")
+                setNotice("")
               }}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                 isLogin ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
@@ -113,6 +128,7 @@ function LoginForm() {
               onClick={() => {
                 setIsLogin(false)
                 setError("")
+                setNotice("")
               }}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                 !isLogin ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
@@ -190,6 +206,11 @@ function LoginForm() {
             {error && (
               <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">{error}</div>
             )}
+            {notice && (
+              <div className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-sm p-3 rounded-lg">
+                {notice}
+              </div>
+            )}
 
             <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
               {isLoading ? "Please wait..." : isLogin ? "Sign In" : "Create Account"}
@@ -199,7 +220,10 @@ function LoginForm() {
 
         {/* Footer note */}
         <p className="text-center text-sm text-muted-foreground mt-6">
-          By continuing, you agree to OpenQuest's Terms of Service and Privacy Policy
+          By continuing, you agree to OpenQuest's{" "}
+          <Link href="/terms" className="underline hover:text-foreground transition-colors">Terms of Service</Link>
+          {" "}and{" "}
+          <Link href="/privacy" className="underline hover:text-foreground transition-colors">Privacy Policy</Link>
         </p>
       </div>
     </div>

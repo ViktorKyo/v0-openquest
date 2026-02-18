@@ -1,0 +1,21 @@
+# Development workflow — hot reload, source mounted as volume
+# Usage: docker compose up
+
+services:
+  openquest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    command: npm run dev
+    ports:
+      - "3001:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    env_file:
+      - .env.local
+    environment:
+      - WATCHPACK_POLLING=true
+    restart: unless-stopped

@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 
 interface InstitutionalAuthorProps {
-  type: "yc" | "weekend-fund"
+  type: "yc" | "weekend-fund" | "conviction" | "ark" | "pathlight" | "accel"
   year?: string // e.g., "2026", "2025"
   quarter?: string // e.g., "Spring 2026", "Fall 2025"
   size?: "sm" | "md" | "lg"
@@ -89,6 +89,94 @@ export function InstitutionalAuthor({
     )
   }
 
+  if (type === "conviction") {
+    return (
+      <div className={cn("flex items-center gap-3", className)}>
+        <div
+          className={cn(
+            "flex items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 font-bold text-white",
+            sizes.container,
+            sizes.logo
+          )}
+        >
+          C
+        </div>
+        <div>
+          <p className={sizes.name}>Conviction</p>
+          <p className={cn("text-muted-foreground", sizes.subtitle)}>
+            Plausible AI Schemes{displayYear ? ` ${displayYear}` : ""}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (type === "ark") {
+    return (
+      <div className={cn("flex items-center gap-3", className)}>
+        <div
+          className={cn(
+            "flex items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 font-bold text-white",
+            sizes.container,
+            sizes.logo
+          )}
+        >
+          A
+        </div>
+        <div>
+          <p className={sizes.name}>ARK Invest</p>
+          <p className={cn("text-muted-foreground", sizes.subtitle)}>
+            Big Ideas{displayYear ? ` ${displayYear}` : ""}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (type === "pathlight") {
+    return (
+      <div className={cn("flex items-center gap-3", className)}>
+        <div
+          className={cn(
+            "flex items-center justify-center rounded-lg bg-gradient-to-br from-emerald-600 to-teal-600 font-bold text-white",
+            sizes.container,
+            sizes.logo
+          )}
+        >
+          P
+        </div>
+        <div>
+          <p className={sizes.name}>Pathlight Ventures</p>
+          <p className={cn("text-muted-foreground", sizes.subtitle)}>
+            Request for Startups{displayYear ? ` ${displayYear}` : ""}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (type === "accel") {
+    return (
+      <div className={cn("flex items-center gap-3", className)}>
+        <div
+          className={cn(
+            "flex items-center justify-center rounded-lg bg-gradient-to-br from-teal-600 to-emerald-600 font-bold text-white",
+            sizes.container,
+            sizes.logo
+          )}
+        >
+          Ac
+        </div>
+        <div>
+          <p className={sizes.name}>Accel</p>
+          <p className={cn("text-muted-foreground", sizes.subtitle)}>
+            Founder Calls{displayYear ? ` ${displayYear}` : ""}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return null
 }
 
@@ -109,7 +197,7 @@ export function InstitutionalLogo({
   type,
   className,
 }: {
-  type: "yc" | "weekend-fund"
+  type: "yc" | "weekend-fund" | "conviction" | "ark" | "pathlight" | "accel"
   className?: string
 }) {
   if (type === "yc") {
@@ -134,6 +222,58 @@ export function InstitutionalLogo({
         )}
       >
         W
+      </div>
+    )
+  }
+
+  if (type === "conviction") {
+    return (
+      <div
+        className={cn(
+          "inline-flex size-5 items-center justify-center rounded bg-gradient-to-br from-violet-600 to-indigo-600 text-xs font-bold text-white",
+          className
+        )}
+      >
+        C
+      </div>
+    )
+  }
+
+  if (type === "ark") {
+    return (
+      <div
+        className={cn(
+          "inline-flex size-5 items-center justify-center rounded bg-gradient-to-br from-cyan-600 to-blue-600 text-xs font-bold text-white",
+          className
+        )}
+      >
+        A
+      </div>
+    )
+  }
+
+  if (type === "pathlight") {
+    return (
+      <div
+        className={cn(
+          "inline-flex size-5 items-center justify-center rounded bg-gradient-to-br from-emerald-600 to-teal-600 text-xs font-bold text-white",
+          className
+        )}
+      >
+        P
+      </div>
+    )
+  }
+
+  if (type === "accel") {
+    return (
+      <div
+        className={cn(
+          "inline-flex size-5 items-center justify-center rounded bg-gradient-to-br from-teal-600 to-emerald-600 text-[10px] font-bold text-white",
+          className
+        )}
+      >
+        Ac
       </div>
     )
   }

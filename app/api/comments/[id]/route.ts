@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserSession } from '@/lib/user-auth';
 import { db } from '@/lib/db/supabase';
-import { comments } from '@/lib/db/schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { comments, problems } from '@/lib/db/schema';
+import { eq, and, isNull, sql } from 'drizzle-orm';
+import { validateCommentContent } from '@/types/comment';
 
 const EDIT_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -21,14 +22,12 @@ export async function PATCH(
     const body = await req.json();
     const { content } = body;
 
-    if (!content || typeof content !== 'string') {
-      return NextResponse.json({ error: 'Content is required' }, { status: 400 });
+    const validationError = validateCommentContent(content);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const trimmedContent = content.trim();
-    if (trimmedContent.length < 1 || trimmedContent.length > 2000) {
-      return NextResponse.json({ error: 'Content must be between 1 and 2000 characters' }, { status: 400 });
-    }
+    const trimmedContent = (content as string).trim();
 
     // Fetch the comment
     const [comment] = await db
@@ -128,6 +127,18 @@ export async function DELETE(
         content: '[deleted]',
       })
       .where(eq(comments.id, commentId));
+
+    await db
+      .update(problems)
+      .set({
+        commentCount: sql`(
+          SELECT COUNT(*)
+          FROM comments c
+          WHERE c.problem_id = ${comment.problemId}
+            AND c.is_deleted = FALSE
+        )`,
+      })
+      .where(eq(problems.id, comment.problemId));
 
     return NextResponse.json({ success: true });
   } catch (error) {

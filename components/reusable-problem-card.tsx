@@ -9,10 +9,11 @@ import { ChevronUp, MessageCircle, Hammer, DollarSign } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { AuthorIntentTags, type Involvement, type WantBuildBlocker, type WantToWorkInvolvement, type AlreadyBuildingSupport } from "@/components/author-intent-tags"
+import { getTimeAgo, getCategoryColor } from "@/lib/formatters"
 
 interface ProblemCardProps {
   problem: {
-    id: string
+    id: string | number
     title: string
     elevatorPitch: string
     category: string
@@ -20,40 +21,18 @@ interface ProblemCardProps {
     commentCount: number
     builderCount: number
     investorCount: number
-    author?: { username: string; avatarUrl: string }
+    author?: { username: string; avatarUrl?: string; avatar?: string }
     isAnonymous: boolean
-    createdAt: Date
+    createdAt: Date | string
     // Author intent fields
     involvement?: Involvement
-    wantBuildBlocker?: WantBuildBlocker
-    wantToWorkInvolvement?: WantToWorkInvolvement
-    alreadyBuildingSupport?: AlreadyBuildingSupport[]
+    wantBuildBlocker?: ReadonlyArray<WantBuildBlocker>
+    wantToWorkInvolvement?: ReadonlyArray<WantToWorkInvolvement>
+    alreadyBuildingSupport?: ReadonlyArray<AlreadyBuildingSupport>
   }
   variant?: "compact" | "detailed"
   onUpvote?: () => void
   isUpvoted?: boolean
-}
-
-// Category color mappings
-const categoryColors: Record<string, string> = {
-  "AI & infrastructure": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  "Climate tech": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  "Creator economy": "bg-purple-500/10 text-purple-400 border-purple-500/20",
-  Moonshots: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  "Health & wellness": "bg-pink-500/10 text-pink-400 border-pink-500/20",
-  "Niche markets": "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  Education: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-}
-
-function getTimeAgo(date: Date): string {
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (seconds < 60) return "just now"
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
-  return `${Math.floor(seconds / 604800)}w ago`
 }
 
 export function ProblemCard({ problem, variant = "compact", onUpvote, isUpvoted: externalUpvoted }: ProblemCardProps) {
@@ -79,7 +58,7 @@ export function ProblemCard({ problem, variant = "compact", onUpvote, isUpvoted:
   }
 
   const timeAgo = getTimeAgo(problem.createdAt)
-  const categoryColor = categoryColors[problem.category] || "bg-gray-500/10 text-gray-400 border-gray-500/20"
+  const categoryColor = getCategoryColor(problem.category)
   const isCompact = variant === "compact"
   const authorDisplay = problem.isAnonymous ? "Anonymous" : problem.author?.username || "Anonymous"
 

@@ -12,12 +12,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MessageCircle, ChevronUp, MoreVertical, Pencil, Trash2, Flag, Hammer, DollarSign, UserPlus, Lock } from "lucide-react"
+import { MessageCircle, ChevronUp, MoreVertical, Pencil, Trash2, Flag, Hammer, DollarSign, UserPlus, Lock, Pin } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { LoginPromptModal } from "@/components/login-prompt-modal"
 import type { Comment, CommentAuthor } from "@/types/comment"
-import { getTimeAgo, canEditComment, canDeleteComment, getEditTimeRemaining } from "@/types/comment"
+import { getTimeAgo, canEditComment, canDeleteComment, getEditTimeRemaining, validateCommentContent, COMMENT_MAX_LENGTH } from "@/types/comment"
 
 interface CommentsSectionProps {
   problemId: string
@@ -47,6 +47,7 @@ export function CommentsSection({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
 
   // Calculate total comments including replies
@@ -56,7 +57,11 @@ export function CommentsSection({
   )
 
   const handleCommentSubmit = async () => {
-    if (!commentText.trim()) return
+    const validationError = validateCommentContent(commentText)
+    if (validationError) {
+      setSubmitError(validationError)
+      return
+    }
 
     if (!isAuthenticated) {
       setShowLoginPrompt(true)
@@ -64,16 +69,23 @@ export function CommentsSection({
     }
 
     setIsSubmitting(true)
+    setSubmitError(null)
     try {
       await onAddComment(commentText.trim())
       setCommentText("")
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to post comment")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const handleReplySubmit = async (parentId: string) => {
-    if (!replyText.trim()) return
+    const validationError = validateCommentContent(replyText)
+    if (validationError) {
+      setSubmitError(validationError)
+      return
+    }
 
     if (!isAuthenticated) {
       setShowLoginPrompt(true)
@@ -81,23 +93,33 @@ export function CommentsSection({
     }
 
     setIsSubmitting(true)
+    setSubmitError(null)
     try {
       await onAddComment(replyText.trim(), parentId)
       setReplyText("")
       setReplyingTo(null)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to post reply")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const handleEditSubmit = async (commentId: string) => {
-    if (!editText.trim()) return
+    const validationError = validateCommentContent(editText)
+    if (validationError) {
+      setSubmitError(validationError)
+      return
+    }
 
     setIsSubmitting(true)
+    setSubmitError(null)
     try {
       await onEditComment(commentId, editText.trim())
       setEditingId(null)
       setEditText("")
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to edit comment")
     } finally {
       setIsSubmitting(false)
     }
@@ -136,19 +158,31 @@ export function CommentsSection({
                 <Textarea
                   placeholder="Share your thoughts, questions, or insights..."
                   value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  className="min-h-24 resize-none"
-                  maxLength={2000}
+                  onChange={(e) => {
+                    setCommentText(e.target.value)
+                    if (submitError) setSubmitError(null)
+                  }}
+                  className={cn("min-h-24 resize-none", submitError && "border-destructive")}
+                  maxLength={COMMENT_MAX_LENGTH}
                 />
+                {submitError && (
+                  <p className="text-sm text-destructive">{submitError}</p>
+                )}
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {commentText.length}/2000
+                  <span className={cn(
+                    "text-xs",
+                    commentText.length > COMMENT_MAX_LENGTH ? "text-destructive" : "text-muted-foreground"
+                  )}>
+                    {commentText.length}/{COMMENT_MAX_LENGTH}
                   </span>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCommentText("")}
+                      onClick={() => {
+                        setCommentText("")
+                        setSubmitError(null)
+                      }}
                       disabled={!commentText.trim()}
                     >
                       Cancel
@@ -156,7 +190,7 @@ export function CommentsSection({
                     <Button
                       size="sm"
                       onClick={handleCommentSubmit}
-                      disabled={!commentText.trim() || isSubmitting}
+                      disabled={!commentText.trim() || isSubmitting || commentText.length > COMMENT_MAX_LENGTH}
                     >
                       {isSubmitting ? "Posting..." : "Post Comment"}
                     </Button>
@@ -281,10 +315,15 @@ function CommentThread({
   // Engagement badges
   const badges = comment.author.engagement
 
+  const isLaunchComment = comment.isLaunchComment
+
   return (
     <div className="space-y-4">
       {/* Main Comment */}
-      <div className="flex gap-3">
+      <div className={cn(
+        "flex gap-3",
+        isLaunchComment && "rounded-lg border border-purple-500/20 bg-purple-500/5 p-4 -mx-1"
+      )}>
         <Avatar className="size-8 shrink-0">
           <AvatarImage src={comment.author.avatarUrl || "/placeholder.svg"} />
           <AvatarFallback className="text-xs">
@@ -297,6 +336,14 @@ function CommentThread({
         </Avatar>
 
         <div className="flex-1 min-w-0 space-y-2">
+          {/* Launch comment label */}
+          {isLaunchComment && (
+            <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 mb-1">
+              <Pin className="h-3 w-3" />
+              <span className="text-xs font-semibold uppercase tracking-wide">Author&apos;s Context</span>
+            </div>
+          )}
+
           {/* Author line with badges */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm">{comment.author.name}</span>
@@ -339,11 +386,14 @@ function CommentThread({
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 className="min-h-20 resize-none"
-                maxLength={2000}
+                maxLength={COMMENT_MAX_LENGTH}
               />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  {editText.length}/2000
+                <span className={cn(
+                  "text-xs",
+                  editText.length > COMMENT_MAX_LENGTH ? "text-destructive" : "text-muted-foreground"
+                )}>
+                  {editText.length}/{COMMENT_MAX_LENGTH}
                 </span>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={onCancelEdit}>
@@ -352,7 +402,7 @@ function CommentThread({
                   <Button
                     size="sm"
                     onClick={() => onEditSubmit(comment.id)}
-                    disabled={!editText.trim() || isSubmitting}
+                    disabled={!editText.trim() || isSubmitting || editText.length > COMMENT_MAX_LENGTH}
                   >
                     {isSubmitting ? "Saving..." : "Save"}
                   </Button>
@@ -449,12 +499,15 @@ function CommentThread({
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 className="min-h-20 resize-none"
-                maxLength={2000}
+                maxLength={COMMENT_MAX_LENGTH}
                 autoFocus
               />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  {replyText.length}/2000
+                <span className={cn(
+                  "text-xs",
+                  replyText.length > COMMENT_MAX_LENGTH ? "text-destructive" : "text-muted-foreground"
+                )}>
+                  {replyText.length}/{COMMENT_MAX_LENGTH}
                 </span>
                 <div className="flex gap-2">
                   <Button
@@ -470,7 +523,7 @@ function CommentThread({
                   <Button
                     size="sm"
                     onClick={() => onReplySubmit(comment.id)}
-                    disabled={!replyText.trim() || isSubmitting}
+                    disabled={!replyText.trim() || isSubmitting || replyText.length > COMMENT_MAX_LENGTH}
                   >
                     {isSubmitting ? "Posting..." : "Reply"}
                   </Button>

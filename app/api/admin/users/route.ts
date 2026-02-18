@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const filter = searchParams.get('filter'); // 'suspended', 'banned', 'active'
 
     // Build query
-    let query = db.select().from(users);
+    let query = db.select().from(users).$dynamic();
 
     // Apply filters
     const conditions = [];
@@ -60,11 +60,16 @@ export async function GET(req: NextRequest) {
       ? query.orderBy(asc(orderColumn))
       : query.orderBy(desc(orderColumn));
 
-    // Get total count
-    const [countResult] = await db
+    // Get total count (with same filters as main query)
+    const baseCountQuery = db
       .select({ count: sql<number>`count(*)::int` })
-      .from(users);
-    const total = countResult.count;
+      .from(users)
+      .$dynamic();
+
+    const [countResult] = conditions.length > 0
+      ? await baseCountQuery.where(and(...conditions))
+      : await baseCountQuery;
+    const total = countResult?.count ?? 0;
 
     // Apply pagination
     const results = await query.limit(limit).offset(offset);

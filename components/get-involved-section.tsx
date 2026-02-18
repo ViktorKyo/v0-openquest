@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ChevronUp, DollarSign, Hammer, UserPlus, Eye, GitFork } from "lucide-react"
+import { ChevronUp, DollarSign, Hammer, UserPlus, Eye, GitFork, Bookmark } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { InvestModal, BuildModal, JoinTeamModal } from "@/components/engagement-modals"
 import { AuthorIntentTags, type Involvement, type AlreadyBuildingSupport } from "@/components/author-intent-tags"
 import { LoginPromptModal } from "@/components/login-prompt-modal"
 import { useAuth } from "@/contexts/auth-context"
-import { savePendingEngagement, type BuildFormData, type InvestFormData, type JoinTeamFormData } from "@/lib/pending-engagement"
+import { savePendingEngagement, type BuildFormData, type InvestFormData, type JoinTeamFormData, type EngagementActionType } from "@/lib/pending-engagement"
 import type { InvestmentTier, InvestmentFocus, EngagementLevel, BuildStatus, BuildStage, LookingFor, RaisingStage, Visibility, RoleInterest, EngagementCounts, EngagedUser } from "@/types/engagement"
 
 interface GetInvolvedSectionProps {
@@ -21,7 +21,7 @@ interface GetInvolvedSectionProps {
 
   // Author intent data
   authorInvolvement?: Involvement
-  alreadyBuildingSupport?: AlreadyBuildingSupport[]
+  alreadyBuildingSupport?: ReadonlyArray<AlreadyBuildingSupport>
   isAnonymous?: boolean
 
   // Current engagement state
@@ -42,6 +42,10 @@ interface GetInvolvedSectionProps {
   onJoinTeam: (data: { roleInterest: RoleInterest; skills: string[]; intro: string; linkedIn?: string; twitter?: string; portfolio?: string }) => void
   onFollow: () => void
   onFork: () => void
+
+  // Save/bookmark
+  isSaved?: boolean
+  onSave?: () => void
 
   // Permissions
   isAuthor?: boolean
@@ -66,6 +70,8 @@ export function GetInvolvedSection({
   onJoinTeam,
   onFollow,
   onFork,
+  isSaved = false,
+  onSave,
   isAuthor = false,
 }: GetInvolvedSectionProps) {
   const { isAuthenticated } = useAuth()
@@ -78,8 +84,13 @@ export function GetInvolvedSection({
   const [loginPromptAction, setLoginPromptAction] = useState("")
 
   // For simple actions without forms, require auth upfront
-  const requireAuth = (action: string, callback: () => void) => {
+  const requireAuth = (action: string, actionType: EngagementActionType, callback: () => void) => {
     if (!isAuthenticated) {
+      savePendingEngagement({
+        type: actionType,
+        problemId,
+        problemTitle,
+      })
       setLoginPromptAction(action)
       setShowLoginPrompt(true)
       return
@@ -182,7 +193,7 @@ export function GetInvolvedSection({
 
           {/* Primary Action - Upvote */}
           <Button
-            onClick={() => requireAuth("upvote this problem", onUpvote)}
+            onClick={() => requireAuth("upvote this problem", "upvote", onUpvote)}
             variant={isUpvoted ? "default" : "outline"}
             size="lg"
             className={cn(
@@ -248,7 +259,7 @@ export function GetInvolvedSection({
           {/* Secondary Actions - Inline */}
           <div className="flex items-center justify-between pt-2 border-t">
             <Button
-              onClick={() => requireAuth("follow this problem", onFollow)}
+              onClick={() => requireAuth("follow this problem", "follow", onFollow)}
               variant="ghost"
               size="sm"
               className={cn("gap-2 text-muted-foreground", isFollowing && "text-foreground")}
@@ -256,8 +267,19 @@ export function GetInvolvedSection({
               <Eye className="h-4 w-4" />
               <span>{isFollowing ? "Following" : "Follow"}</span>
             </Button>
+            {onSave && (
+              <Button
+                onClick={onSave}
+                variant="ghost"
+                size="sm"
+                className={cn("gap-2 text-muted-foreground", isSaved && "text-foreground")}
+              >
+                <Bookmark className={cn("h-4 w-4", isSaved && "fill-current")} />
+                <span>{isSaved ? "Saved" : "Save"}</span>
+              </Button>
+            )}
             <Button
-              onClick={() => requireAuth("fork this problem", onFork)}
+              onClick={() => requireAuth("fork this problem", "fork", onFork)}
               variant="ghost"
               size="sm"
               className="gap-2 text-muted-foreground"

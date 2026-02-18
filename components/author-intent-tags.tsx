@@ -10,9 +10,9 @@ export type AlreadyBuildingSupport = "awareness" | "founding-team" | "cofounder"
 
 interface AuthorIntentTagsProps {
   involvement: Involvement
-  wantBuildBlocker?: WantBuildBlocker
-  wantToWorkInvolvement?: WantToWorkInvolvement
-  alreadyBuildingSupport?: AlreadyBuildingSupport[]
+  wantBuildBlocker?: ReadonlyArray<WantBuildBlocker>
+  wantToWorkInvolvement?: ReadonlyArray<WantToWorkInvolvement>
+  alreadyBuildingSupport?: ReadonlyArray<AlreadyBuildingSupport>
   variant?: "compact" | "detailed"
   isAnonymous?: boolean
 }
@@ -54,20 +54,21 @@ function getInvolvementTag(involvement: Involvement): Tag {
 
 function getSupportTags(
   involvement: Involvement,
-  wantBuildBlocker?: WantBuildBlocker,
-  wantToWorkInvolvement?: WantToWorkInvolvement,
-  alreadyBuildingSupport?: AlreadyBuildingSupport[],
+  wantBuildBlocker?: ReadonlyArray<WantBuildBlocker>,
+  wantToWorkInvolvement?: ReadonlyArray<WantToWorkInvolvement>,
+  alreadyBuildingSupport?: ReadonlyArray<AlreadyBuildingSupport>,
 ): Tag[] {
   const tags: Tag[] = []
 
-  if (involvement === "want-build" && wantBuildBlocker) {
-    if (wantBuildBlocker === "need-capital") {
+  if (involvement === "want-build" && wantBuildBlocker && wantBuildBlocker.length > 0) {
+    if (wantBuildBlocker.includes("need-capital")) {
       tags.push({
         label: "Seeking investment",
         icon: <DollarSign className="h-3 w-3" />,
         color: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
       })
-    } else if (wantBuildBlocker === "need-cofounder") {
+    }
+    if (wantBuildBlocker.includes("need-cofounder")) {
       tags.push({
         label: "Looking for co-founder",
         icon: <Users className="h-3 w-3" />,
@@ -76,14 +77,15 @@ function getSupportTags(
     }
   }
 
-  if (involvement === "want-to-work" && wantToWorkInvolvement) {
-    if (wantToWorkInvolvement === "volunteer") {
+  if (involvement === "want-to-work" && wantToWorkInvolvement && wantToWorkInvolvement.length > 0) {
+    if (wantToWorkInvolvement.includes("volunteer")) {
       tags.push({
         label: "Available to volunteer",
         icon: <Clock className="h-3 w-3" />,
         color: "bg-green-500/10 text-green-400 border-green-500/20",
       })
-    } else if (wantToWorkInvolvement === "full-time") {
+    }
+    if (wantToWorkInvolvement.includes("full-time")) {
       tags.push({
         label: "Open to full-time",
         icon: <Briefcase className="h-3 w-3" />,
@@ -95,7 +97,7 @@ function getSupportTags(
   if (involvement === "already-building" && alreadyBuildingSupport && alreadyBuildingSupport.length > 0) {
     // Prioritize: co-founder > capital > team > visibility
     const priorityOrder: AlreadyBuildingSupport[] = ["cofounder", "capital", "founding-team", "awareness"]
-    const sortedSupport = alreadyBuildingSupport.sort(
+    const sortedSupport = [...alreadyBuildingSupport].sort(
       (a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b),
     )
 

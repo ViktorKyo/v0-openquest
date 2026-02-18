@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { render } from '@react-email/render';
 import { getUserByEmail, setPasswordResetToken, validateEmail } from '@/lib/user-auth';
-import { passwordResetLimiter } from '@/lib/rate-limit';
+import { checkPasswordResetRateLimit } from '@/lib/rate-limit';
 import { PasswordResetEmail } from '@/lib/email/templates/password-reset';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     // Rate limiting by email
     try {
-      await passwordResetLimiter.check(3, email.toLowerCase()); // 3 requests per hour per email
+      await checkPasswordResetRateLimit(email.toLowerCase());
     } catch {
       // Don't reveal rate limiting - still return success
       return NextResponse.json({
@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     const token = await setPasswordResetToken(user.id);
 
     // Build reset URL
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+    const resetUrl = `${appUrl}/reset-password?token=${token}`;
 
     // Send email
     if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_your_api_key_here') {

@@ -28,67 +28,59 @@ export async function POST(
       return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
     }
 
-    // Check if already upvoted
-    const [existingUpvote] = await db
-      .select()
-      .from(commentUpvotes)
-      .where(
-        and(
-          eq(commentUpvotes.commentId, commentId),
-          eq(commentUpvotes.userId, session.userId)
-        )
-      )
-      .limit(1);
-
-    let hasUpvoted: boolean;
-    let newUpvoteCount: number;
-
-    if (existingUpvote) {
-      // Remove upvote
-      await db
-        .delete(commentUpvotes)
+    // Use a transaction to ensure vote record and count stay in sync
+    const result = await db.transaction(async (tx) => {
+      // Check if already upvoted
+      const [existingUpvote] = await tx
+        .select()
+        .from(commentUpvotes)
         .where(
           and(
             eq(commentUpvotes.commentId, commentId),
             eq(commentUpvotes.userId, session.userId)
           )
-        );
+        )
+        .limit(1);
 
-      // Decrement count
-      const [updated] = await db
+      let hasUpvoted: boolean;
+
+      if (existingUpvote) {
+        // Remove upvote record
+        await tx
+          .delete(commentUpvotes)
+          .where(
+            and(
+              eq(commentUpvotes.commentId, commentId),
+              eq(commentUpvotes.userId, session.userId)
+            )
+          );
+        hasUpvoted = false;
+      } else {
+        // Add upvote record
+        await tx.insert(commentUpvotes).values({
+          commentId,
+          userId: session.userId,
+        });
+        hasUpvoted = true;
+      }
+
+      // FIX: Set count to actual COUNT(*) of vote records instead of increment/decrement.
+      // This ensures the denormalized count always matches reality, even if it drifted before.
+      const [updated] = await tx
         .update(comments)
         .set({
-          upvotes: sql`GREATEST(${comments.upvotes} - 1, 0)`,
+          upvotes: sql`(SELECT COUNT(*) FROM comment_upvotes WHERE comment_id = ${commentId})`,
         })
         .where(eq(comments.id, commentId))
         .returning({ upvotes: comments.upvotes });
 
-      hasUpvoted = false;
-      newUpvoteCount = updated.upvotes || 0;
-    } else {
-      // Add upvote
-      await db.insert(commentUpvotes).values({
-        commentId,
-        userId: session.userId,
-      });
-
-      // Increment count
-      const [updated] = await db
-        .update(comments)
-        .set({
-          upvotes: sql`${comments.upvotes} + 1`,
-        })
-        .where(eq(comments.id, commentId))
-        .returning({ upvotes: comments.upvotes });
-
-      hasUpvoted = true;
-      newUpvoteCount = updated.upvotes || 0;
-    }
-
-    return NextResponse.json({
-      hasUpvoted,
-      upvotes: newUpvoteCount,
+      return {
+        hasUpvoted,
+        upvotes: updated.upvotes || 0,
+      };
     });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Error toggling upvote:', error);
     return NextResponse.json({ error: 'Failed to toggle upvote' }, { status: 500 });

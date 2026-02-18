@@ -9,9 +9,23 @@ const _inter = Inter({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "OpenQuest - Find Problems Worth Solving",
+  metadataBase: new URL("https://openquest.com"),
+  title: {
+    default: "OpenQuest - Find Problems Worth Solving",
+    template: "%s | OpenQuest",
+  },
   description: "The community for discovering problems worth solving. Drop what you're doing. Find your quest.",
   generator: "v0.app",
+  openGraph: {
+    siteName: "OpenQuest",
+    type: "website",
+    locale: "en_US",
+    images: [{ url: "/api/og", width: 1200, height: 630, alt: "OpenQuest - Find Problems Worth Solving" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/api/og"],
+  },
   icons: {
     icon: [
       {
@@ -39,6 +53,40 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`font-sans antialiased`} suppressHydrationWarning>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "OpenQuest",
+              url: "https://openquest.com",
+              logo: "https://openquest.com/icon.svg",
+              description: "The community for discovering problems worth solving.",
+              sameAs: [
+                "https://twitter.com/openquest",
+                "https://github.com/openquest",
+                "https://discord.gg/openquest",
+              ],
+            }),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "OpenQuest",
+              url: "https://openquest.com",
+              potentialAction: {
+                "@type": "SearchAction",
+                target: "https://openquest.com/feed?q={search_term_string}",
+                "query-input": "required name=search_term_string",
+              },
+            }),
+          }}
+        />
         <AuthProvider>
           {children}
           <Analytics />

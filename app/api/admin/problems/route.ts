@@ -36,9 +36,11 @@ export async function GET(req: NextRequest) {
         authorId: problems.authorId,
         authorName: users.name,
         authorEmail: users.email,
+        tweetUrls: problems.tweetUrls,
       })
       .from(problems)
-      .leftJoin(users, eq(problems.authorId, users.id));
+      .leftJoin(users, eq(problems.authorId, users.id))
+      .$dynamic();
 
     // Apply filters
     const conditions = [];
@@ -70,11 +72,16 @@ export async function GET(req: NextRequest) {
       ? query.orderBy(asc(orderColumn))
       : query.orderBy(desc(orderColumn));
 
-    // Get total count
-    const [countResult] = await db
+    // Get total count (with same filters as main query)
+    const baseCountQuery = db
       .select({ count: sql<number>`count(*)::int` })
-      .from(problems);
-    const total = countResult.count;
+      .from(problems)
+      .$dynamic();
+
+    const [countResult] = conditions.length > 0
+      ? await baseCountQuery.where(and(...conditions))
+      : await baseCountQuery;
+    const total = countResult?.count ?? 0;
 
     // Apply pagination
     const results = await query.limit(limit).offset(offset);

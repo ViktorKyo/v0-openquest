@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@plugin "@tailwindcss/typography";
+
 @custom-variant dark (&:is(.dark *));
 
 /* New premium dark theme for OpenQuest */
@@ -123,6 +125,21 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Compact react-tweet embeds */
+.tweet-compact .react-tweet-theme {
+  --tweet-body-font-size: 0.8rem;
+  --tweet-body-line-height: 1.25rem;
+  --tweet-header-font-size: 0.7rem;
+  --tweet-actions-font-size: 0.7rem;
+  --tweet-replies-font-size: 0.75rem;
+  --tweet-container-margin: 0;
+}
+
+.tweet-compact .react-tweet-theme img[alt=""] {
+  width: 32px !important;
+  height: 32px !important;
 }
 
 /* Smooth scrolling */

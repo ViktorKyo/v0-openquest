@@ -4,6 +4,11 @@ import { db } from '@/lib/db/supabase';
 import { adminActions, adminUsers } from '@/lib/db/schema';
 import { eq, desc, and, gte, sql } from 'drizzle-orm';
 
+function parsePositiveInt(value: string | null, fallback: number): number {
+  const parsed = Number.parseInt(value || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getAdminSession();
@@ -16,14 +21,14 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams;
     const actionType = searchParams.get('actionType');
     const adminId = searchParams.get('adminId');
-    const days = searchParams.get('days') || '30';
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const days = parsePositiveInt(searchParams.get('days'), 30);
+    const page = parsePositiveInt(searchParams.get('page'), 1);
+    const limit = Math.min(parsePositiveInt(searchParams.get('limit'), 50), 200);
     const offset = (page - 1) * limit;
 
     // Calculate date filter
     const daysAgo = new Date();
-    daysAgo.setDate(daysAgo.getDate() - parseInt(days));
+    daysAgo.setDate(daysAgo.getDate() - days);
 
     // Build query
     const conditions = [gte(adminActions.createdAt, daysAgo)];

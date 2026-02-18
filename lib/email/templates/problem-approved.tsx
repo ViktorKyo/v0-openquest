@@ -21,7 +21,7 @@ export function ProblemApprovedEmail({
   problemTitle,
   problemId,
 }: ProblemApprovedEmailProps) {
-  const problemUrl = `${process.env.NEXT_PUBLIC_APP_URL}/problems/${problemId}`;
+  const problemUrl = `${process.env.NEXT_PUBLIC_APP_URL}/problem/${problemId}`;
 
   return (
     <Html>
@@ -40,7 +40,7 @@ export function ProblemApprovedEmail({
           </Text>
 
           <Section style={problemSection}>
-            <Text style={problemTitle}>{problemTitle}</Text>
+            <Text style={problemTitleText}>{problemTitle}</Text>
           </Section>
 
           <Text style={text}>
@@ -115,7 +115,7 @@ const problemSection = {
   borderLeft: '4px solid #3b82f6',
 };
 
-const problemTitle = {
+const problemTitleText = {
   color: '#1a1a1a',
   fontSize: '18px',
   fontWeight: '600',

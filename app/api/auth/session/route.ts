@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getUserSession } from '@/lib/user-auth';
+import { getUserSession, getUserWithProfileById } from '@/lib/user-auth';
 
 export async function GET() {
   try {
@@ -12,13 +12,24 @@ export async function GET() {
       });
     }
 
+    const user = await getUserWithProfileById(session.userId);
+    if (!user) {
+      return NextResponse.json({
+        authenticated: false,
+        user: null,
+      });
+    }
+
     return NextResponse.json({
       authenticated: true,
       user: {
-        id: session.userId,
-        email: session.email,
-        name: session.name,
-        avatarUrl: session.avatarUrl,
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        status: user.status,
+        hasCompletedOnboarding: user.hasCompletedOnboarding,
+        profileCompletionScore: user.profileCompletionScore,
       },
     });
   } catch (error) {

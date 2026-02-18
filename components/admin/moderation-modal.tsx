@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, CheckCircle, XCircle } from "lucide-react"
+import { X, CheckCircle, XCircle, Twitter } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -11,9 +11,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { extractTweetId, MAX_TWEETS_PER_PROBLEM } from "@/lib/tweet-utils"
 
 interface Problem {
   id: string
@@ -23,14 +25,15 @@ interface Problem {
   status: string
   authorName: string | null
   authorEmail: string | null
-  createdAt: Date
+  createdAt: string | Date
+  tweetUrls?: string[]
 }
 
 interface ModerationModalProps {
   problem: Problem | null
   isOpen: boolean
   onClose: () => void
-  onModerate: (problemId: string, action: "approve" | "reject", notes?: string) => Promise<void>
+  onModerate: (problemId: string, action: "approve" | "reject", notes?: string, tweetUrls?: string[]) => Promise<void>
 }
 
 export function ModerationModal({
@@ -42,13 +45,21 @@ export function ModerationModal({
   const [action, setAction] = useState<"approve" | "reject" | null>(null)
   const [notes, setNotes] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [tweetUrls, setTweetUrls] = useState<string[]>([])
+  const [newTweetUrl, setNewTweetUrl] = useState("")
+  const [tweetUrlError, setTweetUrlError] = useState<string | null>(null)
+
+  // Sync tweetUrls when problem changes
+  useEffect(() => {
+    setTweetUrls(problem?.tweetUrls || [])
+  }, [problem])
 
   const handleSubmit = async () => {
     if (!problem || !action) return
 
     setIsSubmitting(true)
     try {
-      await onModerate(problem.id, action, notes)
+      await onModerate(problem.id, action, notes, tweetUrls)
       handleClose()
     } catch (error) {
       console.error("Moderation failed:", error)
@@ -60,7 +71,25 @@ export function ModerationModal({
   const handleClose = () => {
     setAction(null)
     setNotes("")
+    setTweetUrls([])
+    setNewTweetUrl("")
+    setTweetUrlError(null)
     onClose()
+  }
+
+  const addTweetUrl = () => {
+    const id = extractTweetId(newTweetUrl)
+    if (!id) {
+      setTweetUrlError("Please enter a valid tweet URL")
+      return
+    }
+    if (tweetUrls.some((u) => extractTweetId(u) === id)) {
+      setTweetUrlError("This tweet has already been added")
+      return
+    }
+    setTweetUrls((prev) => [...prev, newTweetUrl.trim()])
+    setNewTweetUrl("")
+    setTweetUrlError(null)
   }
 
   if (!problem) return null
@@ -102,6 +131,59 @@ export function ModerationModal({
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Tweet URLs Management */}
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2">
+              <Twitter className="h-4 w-4" />
+              Related Tweets ({tweetUrls.length}/{MAX_TWEETS_PER_PROBLEM})
+            </Label>
+
+            {tweetUrls.length > 0 && (
+              <div className="space-y-2">
+                {tweetUrls.map((url, index) => (
+                  <div key={index} className="flex items-center gap-2 rounded-lg border bg-secondary/50 px-3 py-2">
+                    <span className="text-sm truncate flex-1">{url}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => setTweetUrls((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tweetUrls.length < MAX_TWEETS_PER_PROBLEM && (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://x.com/user/status/..."
+                  value={newTweetUrl}
+                  onChange={(e) => {
+                    setNewTweetUrl(e.target.value)
+                    setTweetUrlError(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      addTweetUrl()
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={addTweetUrl}>
+                  Add
+                </Button>
+              </div>
+            )}
+
+            {tweetUrlError && (
+              <p className="text-xs text-destructive">{tweetUrlError}</p>
+            )}
           </div>
 
           {/* Action Selection */}
